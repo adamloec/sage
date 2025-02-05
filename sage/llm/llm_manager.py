@@ -1,34 +1,34 @@
-from typing import Any, Optional
+from typing import Any, Optional, Literal
 
 from sage.api.models import ModelConfig
-from sage.llm.llm import LLM
+from sage.llm.llm import SageLLM
+from sage.llm.embeddings import SageEmbeddings
 
 class LLMManager:
     def __init__(self):
-        self._current_model: Optional[LLM] = None
+        self._current_model: Optional[SageLLM] = None
+        self._current_config: Optional[ModelConfig] = None
+        self._current_embeddings: Optional[SageEmbeddings] = None
+
+    def set_llm(self, config: ModelConfig) -> SageLLM:
+        if self._current_config != config:
+
+            self._current_model = SageLLM(config)
+            self._current_config = config
+
+        return self._current_model
         
-    def load_model(self, config: ModelConfig) -> LLM:
-        """Load a new model, unloading any existing one"""
-        if (self._current_model is not None and 
-            self._current_model.config.dict() == config.dict()):
-            return self._current_model
+    def set_embeddings(self) -> SageEmbeddings:
+        if self._current_embeddings is None:
+            self._current_embeddings = SageEmbeddings()
             
-        self.unload_current_model()
-        self._current_model = LLM(config)
+        return self._current_embeddings
+
+    def get_current_llm(self) -> Optional[SageLLM]:
         return self._current_model
 
-    async def get_current_model(self) -> Optional[LLM]:
-        """Get the currently loaded model"""
-        if not self._current_model:
-            raise Exception("No model currently loaded")
-        return self._current_model
+    def get_current_embeddings(self) -> Optional[SageEmbeddings]:
+        return self._current_embeddings
 
     def get_current_config(self) -> Optional[ModelConfig]:
-        """Get the current model's configuration"""
         return self._current_model.config if self._current_model else None
-
-    def unload_current_model(self) -> None:
-        """Unload the current model and free resources"""
-        if self._current_model:
-            self._current_model.unload()
-            self._current_model = None

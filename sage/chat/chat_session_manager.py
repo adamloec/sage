@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from sage.chat.chat_session import ChatSession
 from sage.api.models import ChatMessage, CodeFile
-from sage.db.db_models import ChatSessionDB, ChatMessageDB
+from sage.chat.db.db_models import ChatSessionDB, ChatMessageDB
 
 class ChatSessionManager:
     

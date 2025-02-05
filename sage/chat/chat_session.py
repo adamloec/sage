@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from sage.api.models import ChatMessage, CodeFile
 from sage.llm.llm import LLM
-from sage.db.db_models import ChatSessionDB
+from sage.chat.db.db_models import ChatSessionDB
 
 class ChatSession:
     def __init__(self, db_session: ChatSessionDB):
@@ -27,7 +27,7 @@ class ChatSession:
             for file in files:
                 context += f"\n{file.path}:\n{file.content}\n"
         
-        response = await model.generate(context, self.messages)
+        response = await model.inference(context, self.messages)
         
         # Add assistant message
         assistant_message = ChatMessage(
