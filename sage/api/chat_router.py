@@ -1,13 +1,15 @@
 from fastapi import APIRouter, HTTPException, Request
 from typing import List
 from sage.api.models import (
-    ChatSessionCreate,
+    ChatSessionRequest,
     ChatSessionResponse,
     ChatMessageRequest,
     ChatMessageResponse,
     ModelConfig,
     ChatSummary
 )
+from fastapi.responses import StreamingResponse
+import json
 
 router = APIRouter()
 
@@ -37,19 +39,17 @@ async def get_chat_summaries(request: Request):
     return summaries
 
 @router.post("/sessions", response_model=ChatSessionResponse)
-async def create_chat_session(request: Request, create_request: ChatSessionCreate):
+async def create_chat_session(request: Request, create_request: ChatSessionRequest):
     """Create a new chat session"""
     if request.app.state.llm_manager.get_current_llm() is None:
         request.app.state.llm_manager.load_model(create_request.model_config)
     
-
     session = request.app.state.session_manager.create_session()
     return ChatSessionResponse(
         session_id=session.session_id,
         created_at=session.created_at,
         model_config=request.app.state.llm_manager.get_current_config(),
         messages=session.messages
-
     )
 
 @router.get("/sessions/{session_id}", response_model=ChatSessionResponse)
@@ -72,24 +72,35 @@ async def send_message(
     request: Request, 
     session_id: str, 
     msg_request: ChatMessageRequest,
-    qa_mode: bool = False
+    qa_mode: bool = False,
+    stream: bool = True
 ):
     """Send a message in a chat session"""
     session = request.app.state.session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    response = await session.add_message(
-        msg_request.content,
-        request.app.state.llm_manager,
-        msg_request.files,
-        qa_mode=qa_mode
-    )
-
-    return ChatMessageResponse(
-        message=response,
-        session_id=session_id
-    )
+    if stream:
+        return StreamingResponse(
+            session.stream_message(
+                msg_request.content,
+                request.app.state.llm_manager,
+                msg_request.files,
+                qa_mode=qa_mode
+            ),
+            media_type='text/event-stream'
+        )
+    else:
+        response = await session.add_message(
+            msg_request.content,
+            request.app.state.llm_manager,
+            msg_request.files,
+            qa_mode=qa_mode
+        )
+        return ChatMessageResponse(
+            message=response,
+            session_id=session_id
+        )
 
 @router.put("/model", response_model=ModelConfig)
 async def update_model(request: Request, model_config: ModelConfig):

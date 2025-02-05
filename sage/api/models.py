@@ -6,29 +6,16 @@ class ModelConfig(BaseModel):
     """Configuration for an LLM model"""
     model_name: str
     model_type: Literal["generation", "embedding"] = "generation"
-    model_path: Optional[str] = None # allows user to add model
+    model_path: Optional[str] = None
     
-    # Model loading parameters
+    # Core model parameters
     trust_remote_code: Optional[bool] = None
-    local_files_only: Optional[bool] = None
-    use_cache: Optional[bool] = None
     dtype: Optional[str] = "float16"
     
-    # Model generation improvement parameters
-    return_dict_in_generate: Optional[bool] = None
-    output_attentions: Optional[bool] = None
-    output_hidden_states: Optional[bool] = None
-    low_cpu_mem_usage: Optional[bool] = None
-    
-    # Generation config
-    max_model_len: Optional[int] = None
+    # Generation parameters
     max_tokens: Optional[int] = None
-    do_sample: Optional[bool] = None
-
     temperature: Optional[float] = None
     top_p: Optional[float] = None
-    top_k: Optional[int] = None
-
 
 class CodeFile(BaseModel):
     """Code file content and metadata"""
@@ -38,15 +25,25 @@ class CodeFile(BaseModel):
 
 class ChatMessage(BaseModel):
     """Single message in a chat"""
-    role: str  # "user" or "assistant"
+    role: str  # "user" or "assistant" 
     content: str
     timestamp: datetime = Field(default_factory=datetime.now)
 
-class ChatSessionCreate(BaseModel):
+# Base request/response types
+class ApiRequest(BaseModel):
+    """Base class for API requests"""
+    pass
+
+class ApiResponse(BaseModel):
+    """Base class for API responses"""
+    pass
+
+# Chat session models
+class ChatSessionRequest(ApiRequest):
     """Request model for creating a new chat session"""
     model_config: ModelConfig
 
-class ChatSessionResponse(BaseModel):
+class ChatSessionResponse(ApiResponse):
     """Response model for chat session operations"""
     session_id: str
     created_at: datetime
@@ -54,17 +51,17 @@ class ChatSessionResponse(BaseModel):
     model_config: ModelConfig
     messages: List[ChatMessage] = []
 
-class ChatMessageRequest(BaseModel):
+class ChatMessageRequest(ApiRequest):
     """Request model for sending a message in a chat session"""
     content: str
     files: List[CodeFile] = []
 
-class ChatMessageResponse(BaseModel):
+class ChatMessageResponse(ApiResponse):
     """Response model for chat messages"""
     message: ChatMessage
     session_id: str
 
-class ChatSummary(BaseModel):
+class ChatSummary(ApiResponse):
     """Summary of a chat session for display"""
     session_id: str
     created_at: datetime
