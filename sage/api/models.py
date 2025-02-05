@@ -1,12 +1,34 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Literal
 from pydantic import BaseModel, Field
 
 class ModelConfig(BaseModel):
     """Configuration for an LLM model"""
     model_name: str
-    temperature: float = 0.7
-    max_tokens: int = 1000
+    model_type: Literal["generation", "embedding"] = "generation"
+    model_path: Optional[str] = None # allows user to add model
+    
+    # Model loading parameters
+    trust_remote_code: Optional[bool] = None
+    local_files_only: Optional[bool] = None
+    use_cache: Optional[bool] = None
+    dtype: Optional[str] = "float16"
+    
+    # Model generation improvement parameters
+    return_dict_in_generate: Optional[bool] = None
+    output_attentions: Optional[bool] = None
+    output_hidden_states: Optional[bool] = None
+    low_cpu_mem_usage: Optional[bool] = None
+    
+    # Generation config
+    max_model_len: Optional[int] = None
+    max_tokens: Optional[int] = None
+    do_sample: Optional[bool] = None
+
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    top_k: Optional[int] = None
+
 
 class CodeFile(BaseModel):
     """Code file content and metadata"""
