@@ -11,6 +11,7 @@ class BackendInstaller {
         this.context = context;
         this.extensionPath = context.extensionPath;
         this.ENV_NAME = 'sage_vscode_env';
+        this.useCondaEnv = false;
     }
 
     async checkPythonEnvironment() {
@@ -68,10 +69,12 @@ class BackendInstaller {
             );
             
             if (!choice) return null; // User cancelled
+            this.useCondaEnv = choice.value === 'conda';
             return { manager: choice.value, name: this.ENV_NAME };
         }
 
         // If only one environment is available, use that
+        this.useCondaEnv = environments[0] === 'conda';
         return { manager: environments[0], name: this.ENV_NAME };
     }
 
@@ -111,7 +114,7 @@ class BackendInstaller {
                 await execAsync(`conda create -n ${envName} python=3.12 -y`);
 
                 progress.report({ message: 'Installing backend...' });
-                await execAsync(`conda run -n ${envName} pip install git+https://github.com/adamloec/sage.git#subdirectory=sage`);
+                await execAsync(`conda run -n ${envName} pip install git+https://github.com/adamloec/sage.git#subdirectory=server --no-cache-dir`);
             });
 
             return true;
@@ -144,13 +147,42 @@ class BackendInstaller {
                     path.join(envPath, 'Scripts', 'pip') :
                     path.join(envPath, 'bin', 'pip');
                 
-                await execAsync(`"${pipPath}" install git+https://github.com/adamloec/sage.git#subdirectory=sage`);
+                await execAsync(`"${pipPath}" install git+https://github.com/adamloec/sage.git#subdirectory=server --no-cache-dir`);
             });
 
             return true;
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to install: ${error.message}`);
             return false;
+        }
+    }
+
+    async installBackend() {
+        try {
+            // Create environment first
+            await this.createEnvironment();
+
+            // Get the path to the sage backend directory (bundled with extension)
+            const sagePath = path.join(this.extensionPath, 'sage');
+
+            if (this.useCondaEnv) {
+                await execAsync(`conda activate ${this.ENV_NAME} && pip install "${sagePath}"`, {
+                    shell: true
+                });
+            } else {
+                const pipPath = process.platform === 'win32'
+                    ? path.join(this.extensionPath, '..', this.ENV_NAME, 'Scripts', 'pip')
+                    : path.join(this.extensionPath, '..', this.ENV_NAME, 'bin', 'pip');
+                
+                await execAsync(`"${pipPath}" install "${sagePath}"`, {
+                    shell: true
+                });
+            }
+
+            vscode.window.showInformationMessage('Sage backend installed successfully!');
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to install Sage backend: ${error.message}`);
+            throw error;
         }
     }
 }

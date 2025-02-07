@@ -13,6 +13,7 @@ setup(
         "pydantic",
         "aiosqlite",
         "python-dotenv",
+        "greenlet",
     ],
     python_requires=">=3.12",
     entry_points={

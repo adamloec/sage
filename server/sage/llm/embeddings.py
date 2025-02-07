@@ -1,7 +1,6 @@
 from typing import List
-from langchain_core.embeddings import Embeddings
 
-class SageEmbeddings(Embeddings):
+class SageEmbeddings:
 
     embedding_model_name: str = "stella"
     
