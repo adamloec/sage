@@ -2,26 +2,27 @@ from datetime import datetime
 from typing import List, Optional, Literal
 from pydantic import BaseModel, Field
 
-class ModelConfig(BaseModel):
+class LLMConfig(BaseModel):
     """Configuration for an LLM model"""
     model_name: str
-    model_type: Literal["generation", "embedding"] = "generation"
     model_path: Optional[str] = None
     
     # Core model parameters
-    trust_remote_code: Optional[bool] = None
+    trust_remote_code: Optional[bool] = False
     dtype: Optional[str] = "float16"
+    local_files_only: Optional[bool] = True
+    use_cache: Optional[bool] = True
+    return_dict_in_generate: Optional[bool] = True
+    output_attentions: Optional[bool] = False
+    output_hidden_states: Optional[bool] = False
+    low_cpu_mem_usage: Optional[bool] = True
     
     # Generation parameters
-    max_tokens: Optional[int] = None
+    max_new_tokens: Optional[int] = None
     temperature: Optional[float] = None
+    do_sample: Optional[bool] = None
     top_p: Optional[float] = None
-
-class CodeFile(BaseModel):
-    """Code file content and metadata"""
-    path: str
-    content: str
-    language: Optional[str] = None
+    top_k: Optional[float] = None
 
 class ChatMessage(BaseModel):
     """Single message in a chat"""
@@ -38,33 +39,19 @@ class ApiResponse(BaseModel):
     """Base class for API responses"""
     pass
 
-# Chat session models
-class ChatSessionRequest(ApiRequest):
-    """Request model for creating a new chat session"""
-    model_config: ModelConfig
-
 class ChatSessionResponse(ApiResponse):
     """Response model for chat session operations"""
     session_id: str
     created_at: datetime
     last_message_at: Optional[datetime] = None
-    model_config: ModelConfig
+    llm_config: LLMConfig
     messages: List[ChatMessage] = []
 
 class ChatMessageRequest(ApiRequest):
     """Request model for sending a message in a chat session"""
     content: str
-    files: List[CodeFile] = []
 
 class ChatMessageResponse(ApiResponse):
     """Response model for chat messages"""
     message: ChatMessage
     session_id: str
-
-class ChatSummary(ApiResponse):
-    """Summary of a chat session for display"""
-    session_id: str
-    created_at: datetime
-    first_message: Optional[str] = None
-    last_message_at: Optional[datetime] = None
-    message_count: int

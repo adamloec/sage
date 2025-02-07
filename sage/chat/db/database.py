@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -22,6 +23,11 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+@asynccontextmanager
 async def get_db():
-    async with AsyncSessionLocal() as session:
+    """Provide a transactional scope around a series of operations."""
+    session = AsyncSessionLocal()
+    try:
         yield session
+    finally:
+        await session.close()

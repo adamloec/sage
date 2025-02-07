@@ -1,81 +1,158 @@
-from typing import Optional, List, Any, Dict, Callable
-from langchain_core.language_models.llms import LLM
+from typing import Optional, List, Any, Dict, Callable, Iterator
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer
+import gc
 
-from sage.api.models import ModelConfig
+from sage.api.dto import LLMConfig, ChatMessage
 
-class SageLLM(LLM):
+class SageLLM:
 
-    model_config: Optional[ModelConfig] = None
+    def __init__(self, llm_config: LLMConfig):
+        self.llm_config = llm_config
 
-    _model: Optional[AutoModelForCausalLM] = None
-    _tokenizer: Optional[AutoTokenizer] = None
+        self._llm: Optional[AutoModelForCausalLM] = None
+        self._tokenizer: Optional[AutoTokenizer] = None
+        self._device: Optional[torch.device] = None
 
-    def _load_model(self):
+    def load_llm(self):
+        # Determine the best available device
+        if torch.cuda.is_available():
+            self._device = torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            self._device = torch.device("mps")
+        else:
+            self._device = torch.device("cpu")
+
         self._tokenizer = AutoTokenizer.from_pretrained(
-            pretrained_model_name_or_path=self.model_config["model_path"],
-            trust_remote_code=self.model_config.get("trust_remote_code", False),
-            local_files_only=self.model_config.get("local_files_only", True)
+            pretrained_model_name_or_path=self.llm_config.model_path,
+            trust_remote_code=self.llm_config.trust_remote_code or False,
+            local_files_only=True  # Consider adding to LLMConfig if configurable
         )
 
-        self._model = AutoModelForCausalLM.from_pretrained(
-            pretrained_model_name_or_path=self.model_config["model_path"],
-            trust_remote_code=self.model_config.get("trust_remote_code", False),
-            local_files_only=self.model_config.get("local_files_only", True),
-            use_cache=self.model_config.get("use_cache", True),
-            torch_dtype=self.model_config.get("dtype", torch.float16),
-            return_dict_in_generate=self.model_config.get("return_dict_in_generate"),
-            output_attentions=self.model_config.get("output_attentions"),
-            output_hidden_states=self.model_config.get("output_hidden_states"),
-            low_cpu_mem_usage=self.model_config.get("low_cpu_mem_usage"),
-            device_map=f"cuda:",
-        )
+        self._llm = AutoModelForCausalLM.from_pretrained(
+            pretrained_model_name_or_path=self.llm_config.model_path,
+            trust_remote_code=self.llm_config.trust_remote_code or False,
+            local_files_only=True,  # Consider adding to LLMConfig if configurable
+            use_cache=True,  # Consider adding to LLMConfig if configurable
+            torch_dtype=getattr(torch, self.llm_config.dtype),  # Convert string to torch dtype
+            return_dict_in_generate=True,  # Consider adding to LLMConfig if configurable
+            output_attentions=False,  # Consider adding to LLMConfig if configurable
+            output_hidden_states=False,  # Consider adding to LLMConfig if configurable
+            low_cpu_mem_usage=True,  # Consider adding to LLMConfig if configurable
+            device_map="auto",  # Enable automatic device mapping
+        ).to(self._device)
 
-    def _deload_model(self):
-        del self._model
-        del self._tokenizer
+    def deload_llm(self):
+        try:
+            # Clear model and tokenizer
+            if self._llm is not None:
+                self._llm.cpu()  # Move model to CPU first
+                del self._llm
+                self._llm = None
+            if self._tokenizer is not None:
+                del self._tokenizer
+                self._tokenizer = None
+            
+            # Clear device-specific caches
+            if self._device is not None:
+                device_type = self._device.type
+                if device_type == 'cuda':
+                    torch.cuda.empty_cache()
+                    torch.cuda.ipc_collect()
+                elif device_type == 'mps':
+                    torch.mps.empty_cache()
+                self._device = None
 
+            gc.collect()
 
-    def _call(self, 
-              prompt: str, 
-              stop: Optional[List[str]] = None, 
-              run_manager: Optional[Callable] = None, 
-              **kwargs: Any) -> str:
+        except Exception as e:
+            print(f"Warning: Error during model deallocation: {str(e)}")
 
-        # Load generation model
-        self._load_model()
+    def inference(self, prompt: str, message_history: List[ChatMessage]) -> str:
 
-        # Inference
-        encoded_input = self.tokenizer(
+        try:
+            # Inference
+            encoded_input = self._tokenizer(
                 prompt,
                 return_tensors="pt",
-            )
+            ).to(self._device)
+            
+            with torch.inference_mode():
+                generation_config = {
+                    "use_cache": self.llm_config.use_cache,
+                    "max_new_tokens": self.llm_config.max_new_tokens,
+                    "do_sample": self.llm_config.do_sample,
+                    "temperature": self.llm_config.temperature,
+                    "top_p": self.llm_config.top_p,
+                    "top_k": self.llm_config.top_k,
+                    "pad_token_id": self._tokenizer.pad_token_id,
+                }
+
+                outputs = self._llm.generate(
+                    **encoded_input,
+                    **generation_config
+                )
+                
+                # Decode the generated text
+                generated_text = self._tokenizer.decode(outputs[0][encoded_input.input_ids.shape[1]:], skip_special_tokens=True)
+
+            self._deload_llm()
+
+            return generated_text
         
-        with torch.inference_mode():
-            generation_config = {
-                "use_cache": self.model_config.get("use_cache", True),
+        except Exception as e:
+            self.deload_llm()
+            raise e
+    
+    # def stream(
+    #     self,
+    #     prompt: str,
+    #     stop: Optional[List[str]] = None,
+    #     run_manager: Optional[CallbackManagerForLLMRun] = None,
+    #     **kwargs: Any
+    # ) -> Iterator[GenerationChunk]:
+    #     # Load generation model
+    #     self._load_llm()
 
+    #     try:
+    #         # Create a streamer
+    #         streamer = TextIteratorStreamer(self._tokenizer)
 
-                "max_new_tokens": self.model_config.get("max_new_tokens", 512),
-                "do_sample": self.model_config.get("do_sample", True),
-                "temperature": self.model_config.get("temperature", 0.01),
-                "top_p": self.model_config.get("top_p", 0.1),
+    #         # Encode the input
+    #         encoded_input = self._tokenizer(
+    #             prompt,
+    #             return_tensors="pt",
+    #         ).to(self._device)  # Move input to MPS device
+    #         input_ids = inputs["input_ids"]
 
-                "top_k":self.model_config.get("top_k", 20),
+    #         # Setup generation config
+    #         generation_config = {
+    #             "inputs": input_ids,
+    #             "use_cache": self.llm_config.get("use_cache", True),
+    #             "max_new_tokens": self.llm_config.get("max_new_tokens", 512),
+    #             "do_sample": self.llm_config.get("do_sample", True),
+    #             "temperature": self.llm_config.get("temperature", 0.01),
+    #             "top_p": self.llm_config.get("top_p", 0.1),
+    #             "top_k": self.llm_config.get("top_k", 20),
+    #             "pad_token_id": self._tokenizer.pad_token_id,
+    #             "streamer": streamer,
+    #         }
 
+    #         # Create a thread to run the generation
+    #         thread = threading.Thread(
+    #             target=lambda: self._llm.generate(**generation_config)
+    #         )
+    #         thread.start()
 
-                "pad_token_id": self.tokenizer.pad_token_id,
-            }
+    #         # Yield from the streamer
+    #         for new_text in streamer:
+    #             chunk = GenerationChunk(text=new_text)
+    #             if run_manager:
+    #                 run_manager.on_llm_new_token(chunk.text, chunk=chunk)
+    #             yield chunk
 
-            output = self.model.generate(
-                **encoded_input,
-                **generation_config
-            )
+    #         thread.join()
 
-        # deload
-        self._deload_model()
-
-        
-
-
-    def _identifying_params(self) -> Dict[str, Any]:
-        return {"model_config": self.model_config}
+        # finally:
+        #     # Always clean up
+        #     self._deload_llm()

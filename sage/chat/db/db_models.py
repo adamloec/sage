@@ -25,6 +25,5 @@ class ChatMessageDB(Base):
     role: Mapped[str] = mapped_column(String)
     content: Mapped[str] = mapped_column(String)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    files: Mapped[dict] = mapped_column(JSON, nullable=True)
     
     session: Mapped[ChatSessionDB] = relationship(back_populates="messages")

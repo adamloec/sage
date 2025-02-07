@@ -1,34 +1,31 @@
-from typing import Any, Optional, Literal
+from typing import Optional
 
-from sage.api.models import ModelConfig
+from sage.api.dto import LLMConfig
 from sage.llm.llm import SageLLM
 from sage.llm.embeddings import SageEmbeddings
 
 class LLMManager:
     def __init__(self):
-        self._current_model: Optional[SageLLM] = None
-        self._current_config: Optional[ModelConfig] = None
-        self._current_embeddings: Optional[SageEmbeddings] = None
+        self._current_llm: Optional[SageLLM] = None
+        self._current_llm_config: Optional[LLMConfig] = None
 
-    def set_llm(self, config: ModelConfig) -> SageLLM:
-        if self._current_config != config:
+    def set_llm(self, llm_config: LLMConfig) -> SageLLM:
+        if self._current_llm_config != llm_config:
+            self.remove_llm()
+            self._current_llm = SageLLM(llm_config=llm_config)
+            self._current_llm_config = llm_config
 
-            self._current_model = SageLLM(config)
-            self._current_config = config
+        return self._current_llm
 
-        return self._current_model
-        
-    def set_embeddings(self) -> SageEmbeddings:
-        if self._current_embeddings is None:
-            self._current_embeddings = SageEmbeddings()
-            
-        return self._current_embeddings
+    def remove_llm(self):
+        if self._current_llm:
+            self._current_llm.deload_llm()
+            self._current_llm = None
+            self._current_llm_config = None
 
     def get_current_llm(self) -> Optional[SageLLM]:
-        return self._current_model
+        return self._current_llm
 
-    def get_current_embeddings(self) -> Optional[SageEmbeddings]:
-        return self._current_embeddings
+    def get_current_config(self) -> Optional[LLMConfig]:
+        return self._current_llm_config
 
-    def get_current_config(self) -> Optional[ModelConfig]:
-        return self._current_model.config if self._current_model else None
