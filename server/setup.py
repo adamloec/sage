@@ -14,11 +14,12 @@ setup(
         "aiosqlite",
         "python-dotenv",
         "greenlet",
+        "click",
     ],
     python_requires=">=3.12",
     entry_points={
         "console_scripts": [
-            "sage=sage.server:run",
+            "sage=sage.cli:cli",
         ],
     }
 ) 

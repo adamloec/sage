@@ -12,7 +12,7 @@ class SagePanel {
     async startServer() {
         try {
             this._panel.webview.html = getWebviewContent('Starting Sage server...');
-            this._serverProcess = await this._environmentManager.spawnInEnvironment('sage');
+            this._serverProcess = await this._environmentManager.spawnInEnvironment('sage serve');
 
             let serverStarted = false;
             
