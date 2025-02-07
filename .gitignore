@@ -1,3 +1,4 @@
+*.db
 sage/llm/hf/generation/*
 !sage/llm/hf/generation/.gitkeep
 sage/llm/hf/embeddings/*
