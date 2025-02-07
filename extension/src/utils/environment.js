@@ -19,16 +19,10 @@ class EnvironmentManager {
         }
 
         if (envType === 'conda') {
-            // Use conda activate, then run command
-            const activateCommand = process.platform === 'win32'
-                ? `conda activate ${this.ENV_NAME} && ${command}`
-                : `conda activate ${this.ENV_NAME} && ${command}`;
-            return await execAsync(activateCommand, { 
-                shell: process.platform === 'win32' ? 'cmd.exe' : '/bin/bash',
-                env: {
-                    ...process.env,
-                    CONDA_SHLVL: "1"  // Ensure conda environment is initialized
-                }
+            const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/bash';
+            return await execAsync(`conda run -n ${this.ENV_NAME} ${command}`, {
+                shell,
+                env: { ...process.env }
             });
         } else {
             const envPath = path.join(this.extensionPath, '..', this.ENV_NAME);
@@ -49,19 +43,9 @@ class EnvironmentManager {
         }
 
         if (envType === 'conda') {
-            // For Windows
-            if (process.platform === 'win32') {
-                return spawn('cmd', ['/c', `conda activate ${this.ENV_NAME} && ${command}`], {
-                    shell: true
-                });
-            }
-            // For Unix-like systems
-            return spawn('/bin/bash', ['-c', `conda activate ${this.ENV_NAME} && ${command}`], {
+            return spawn('conda', ['run', '-n', this.ENV_NAME, command, ...args], {
                 shell: true,
-                env: {
-                    ...process.env,
-                    CONDA_SHLVL: "1"  // Ensure conda environment is initialized
-                }
+                env: { ...process.env }
             });
         } else {
             const envPath = path.join(this.extensionPath, '..', this.ENV_NAME);

@@ -33,10 +33,10 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(chat_router, prefix="/api")
 app.include_router(llm_router, prefix="/api")
 
-def run():
+def run(host, port, reload):
     uvicorn.run(
         "sage.server:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=False
+        host=host,
+        port=port,
+        reload=reload
     )
