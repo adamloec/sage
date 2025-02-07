@@ -6,6 +6,6 @@ def load_config():
     load_dotenv()
 
     # Database configuration
-    os.environ.setdefault('SAGE_DB_PATH', 'sqlite+aiosqlite:///sage/chat/db/session_history.db')
+    os.environ.setdefault('SAGE_DB_PATH', 'sqlite+aiosqlite:///server/sage/chat/db/session_history.db')
 
 load_config() 
