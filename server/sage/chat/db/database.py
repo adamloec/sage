@@ -4,8 +4,12 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from .db_models import Base
 
-# Get database path from environment or use default
-DB_PATH = os.environ.get('SAGE_DB_PATH', 'sqlite+aiosqlite:///session_history.db')
+# Get database path from environment
+DB_PATH = os.environ.get('SAGE_DB_PATH')
+
+# Ensure the database directory exists
+db_url = DB_PATH.replace('sqlite+aiosqlite:///', '')
+os.makedirs(os.path.dirname(db_url), exist_ok=True)
 
 engine = create_async_engine(
     DB_PATH,
