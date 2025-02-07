@@ -4,8 +4,11 @@ import uvicorn
 
 from sage.llm.llm_manager import LLMManager
 from sage.chat.chat_session_manager import ChatSessionManager
-from sage.api.chat_router import router as chat_router
 from sage.chat.db.database import init_db, get_db
+from sage.api.chat_router import router as chat_router
+from sage.api.llm_router import router as llm_router
+
+import sage.config as config
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,6 +31,7 @@ app = FastAPI(lifespan=lifespan)
 
 # Include routers
 app.include_router(chat_router, prefix="/api")
+app.include_router(llm_router, prefix="/api")
 
 def run():
     uvicorn.run(
@@ -36,3 +40,6 @@ def run():
         port=8000,
         reload=True
     )
+
+if __name__ == "__main__":
+    run()

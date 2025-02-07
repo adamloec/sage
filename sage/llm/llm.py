@@ -2,6 +2,7 @@ from typing import Optional, List, Any, Dict, Callable, Iterator
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer
 import gc
+from threading import Thread
 
 from sage.api.dto import LLMConfig, ChatMessage
 
@@ -96,63 +97,46 @@ class SageLLM:
                 # Decode the generated text
                 generated_text = self._tokenizer.decode(outputs[0][encoded_input.input_ids.shape[1]:], skip_special_tokens=True)
 
-            self._deload_llm()
-
             return generated_text
         
         except Exception as e:
             self.deload_llm()
             raise e
-    
-    # def stream(
-    #     self,
-    #     prompt: str,
-    #     stop: Optional[List[str]] = None,
-    #     run_manager: Optional[CallbackManagerForLLMRun] = None,
-    #     **kwargs: Any
-    # ) -> Iterator[GenerationChunk]:
-    #     # Load generation model
-    #     self._load_llm()
+        
+    async def stream_inference(self, prompt: str, message_history: List[ChatMessage]):
+        try:
+            # Inference
+            encoded_input = self._tokenizer(
+                prompt,
+                return_tensors="pt",
+            ).to(self._device)
 
-    #     try:
-    #         # Create a streamer
-    #         streamer = TextIteratorStreamer(self._tokenizer)
+            streamer = TextIteratorStreamer(
+                tokenizer=self._tokenizer,
+                skip_prompt=True,
+                skip_special_tokens=True
+            )
 
-    #         # Encode the input
-    #         encoded_input = self._tokenizer(
-    #             prompt,
-    #             return_tensors="pt",
-    #         ).to(self._device)  # Move input to MPS device
-    #         input_ids = inputs["input_ids"]
+            # Start generation in a separate thread
+            generation_kwargs = {
+                **encoded_input,
+                "use_cache": self.llm_config.use_cache,
+                "max_new_tokens": self.llm_config.max_new_tokens,
+                "do_sample": self.llm_config.do_sample,
+                "temperature": self.llm_config.temperature,
+                "top_p": self.llm_config.top_p,
+                "top_k": self.llm_config.top_k,
+                "pad_token_id": self._tokenizer.pad_token_id,
+                "streamer": streamer,
+            }
 
-    #         # Setup generation config
-    #         generation_config = {
-    #             "inputs": input_ids,
-    #             "use_cache": self.llm_config.get("use_cache", True),
-    #             "max_new_tokens": self.llm_config.get("max_new_tokens", 512),
-    #             "do_sample": self.llm_config.get("do_sample", True),
-    #             "temperature": self.llm_config.get("temperature", 0.01),
-    #             "top_p": self.llm_config.get("top_p", 0.1),
-    #             "top_k": self.llm_config.get("top_k", 20),
-    #             "pad_token_id": self._tokenizer.pad_token_id,
-    #             "streamer": streamer,
-    #         }
+            thread = Thread(target=self._llm.generate, kwargs=generation_kwargs)
+            thread.start()
 
-    #         # Create a thread to run the generation
-    #         thread = threading.Thread(
-    #             target=lambda: self._llm.generate(**generation_config)
-    #         )
-    #         thread.start()
+            # Yield tokens as they become available
+            for new_text in streamer:
+                yield new_text
 
-    #         # Yield from the streamer
-    #         for new_text in streamer:
-    #             chunk = GenerationChunk(text=new_text)
-    #             if run_manager:
-    #                 run_manager.on_llm_new_token(chunk.text, chunk=chunk)
-    #             yield chunk
-
-    #         thread.join()
-
-        # finally:
-        #     # Always clean up
-        #     self._deload_llm()
+        except Exception as e:
+            self.deload_llm()
+            raise e

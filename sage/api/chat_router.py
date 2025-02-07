@@ -1,27 +1,13 @@
 from fastapi import APIRouter, HTTPException, Request
 from typing import List
 from sage.api.dto import (
-    ChatSessionRequest,
     ChatSessionResponse,
     ChatMessageRequest,
     ChatMessageResponse,
-    LLMConfig,
 )
 from fastapi.responses import StreamingResponse
 
 router = APIRouter()
-
-@router.put("/llm", response_model=LLMConfig)
-async def update_llm(request: Request, llm_config: LLMConfig):
-    """Update the current llm for all sessions"""
-    try:
-        request.app.state.llm_manager.set_llm(llm_config)
-        return llm_config
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to update model: {str(e)}"
-        )
 
 @router.post("/sessions", response_model=ChatSessionResponse)
 async def create_chat_session(request: Request):
@@ -32,7 +18,7 @@ async def create_chat_session(request: Request):
         session_id=session.session_id,
         created_at=session.created_at,
         llm_config=request.app.state.llm_manager.get_current_config(),
-        messages=session.messages
+        messages=session.message_history
     )
 
 @router.get("/sessions/{session_id}", response_model=ChatSessionResponse)
@@ -46,7 +32,7 @@ async def get_chat_session(request: Request, session_id: str):
         session_id=session.session_id,
         created_at=session.created_at,
         llm_config=request.app.state.llm_manager.get_current_config(),
-        messages=session.messages
+        messages=session.message_history
     )
 
 @router.post("/sessions/{session_id}/messages", response_model=ChatMessageResponse)
@@ -62,11 +48,18 @@ async def send_message(
         raise HTTPException(status_code=404, detail="Session not found")
     
     if stream:
+        async def event_generator():
+            async with request.app.state.chat_session_manager.get_db() as db:
+                async for token in session.stream_message(
+                    msg_request.content,
+                    request.app.state.llm_manager.get_current_llm(),
+                    db
+                ):
+                    yield f"data: {token}\n\n"
+                yield "data: [DONE]\n\n"
+            
         return StreamingResponse(
-            session.stream_message(
-                msg_request.content,
-                request.app.state.llm_manager.get_current_llm()
-            ),
+            event_generator(),
             media_type='text/event-stream'
         )
     else:

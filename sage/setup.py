@@ -12,7 +12,7 @@ setup(
         "torch",
         "pydantic",
         "aiosqlite",
-        "langchain",
+        "python-dotenv",
     ],
     python_requires=">=3.12",
     entry_points={

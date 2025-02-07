@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from sage.api.dto import ChatMessage, LLMConfig
 from sage.llm.llm import SageLLM
@@ -71,7 +70,23 @@ class ChatSession:
         
         return assistant_message
     
-    # async def stream_message(self, prompt: str, llm: SageLLM):
-    #     """Stream a message in a chat session"""
-    #     async for token in llm.stream(prompt, self.message_history):
-    #         yield token
+    async def stream_message(self, prompt: str, llm: SageLLM, db: AsyncSession):
+        """Stream a message in a chat session and update database after completion"""
+        # Create the user message
+        user_message = ChatMessage(role="user", content=prompt)
+        self.message_history.append(user_message)
+        
+        # Stream the response while collecting the full response
+        full_response = ""
+        message_history = [msg.content for msg in self.message_history]
+        
+        async for token in llm.stream_inference(prompt, message_history):
+            full_response += token
+            yield token
+        
+        # Create the assistant message with the complete response
+        assistant_message = ChatMessage(role="assistant", content=full_response)
+        self.message_history.append(assistant_message)
+        
+        # Update the database with both messages
+        await self.update_session_database(user_message, assistant_message, db)

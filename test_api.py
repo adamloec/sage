@@ -4,33 +4,54 @@ from typing import Dict
 
 BASE_URL = "http://localhost:8000/api"
 
-def create_session(llm_config: Dict) -> str:
+def initialize_llm(llm_config: Dict) -> None:
+    """Initialize the LLM with the given configuration"""
+    print("\nInitializing LLM...")
+    response = requests.put(
+        f"{BASE_URL}/llm",
+        json=llm_config
+    )
+    response.raise_for_status()
+    print("LLM initialized successfully")
+
+def create_session() -> str:
     """Create a new chat session and return session_id"""
     print("\nCreating new chat session...")
-    response = requests.post(
-        f"{BASE_URL}/sessions",
-        json={"llm_config": llm_config}
-    )
+    response = requests.post(f"{BASE_URL}/sessions")
     response.raise_for_status()
     session_data = response.json()
     print(f"Session created with ID: {session_data['session_id']}")
     return session_data["session_id"]
 
-def send_message(session_id: str, message: str):
+def send_message(session_id: str, message: str, stream: bool = True):
     """Send a message and get the response"""
     print(f"\nSending message: {message}")
     
     response = requests.post(
         f"{BASE_URL}/sessions/{session_id}/messages",
-        params={"stream": False},  # Explicitly disable streaming
+        params={"stream": stream},
         json={
             "content": message,
-        }
+        },
+        stream=True  # Enable requests streaming
     )
     response.raise_for_status()
-    response_data = response.json()
-    print("Response:", response_data["message"]["content"])
-    return response_data
+    
+    if stream:
+        print("Response: ", end="", flush=True)
+        for line in response.iter_lines():
+            if line:
+                # Remove "data: " prefix and decode
+                line = line.decode('utf-8').removeprefix('data: ')
+                if line == '[DONE]':
+                    break
+                print(line, end="", flush=True)
+        print()  # New line after response
+        return None
+    else:
+        response_data = response.json()
+        print("Response:", response_data["message"]["content"])
+        return response_data
 
 def main():
     # Extract model name from path
@@ -49,19 +70,22 @@ def main():
     }
     
     try:
+        # Initialize the LLM
+        initialize_llm(llm_config)
+        
         # Create a new session
-        session_id = create_session(llm_config)
+        session_id = create_session()
         
         # Test messages
         messages = [
-            "Hello! How are you?",
-            "What is the capital of France?",
+            "Write a cuda kernal that adds two numbers.",
+            "Write a python script for the fibonacci sequence.",
             "Write a short poem about coding."
         ]
         
         # Send each message
         for message in messages:
-            send_message(session_id, message)
+            send_message(session_id, message, stream=True)  # Enable streaming by default
             input("\nPress Enter to send next message...")  # Pause between messages
             
     except requests.exceptions.RequestException as e:

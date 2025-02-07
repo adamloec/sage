@@ -12,9 +12,12 @@ class LLMManager:
     def set_llm(self, llm_config: LLMConfig) -> SageLLM:
         if self._current_llm_config != llm_config:
             self.remove_llm()
+
             self._current_llm = SageLLM(llm_config=llm_config)
             self._current_llm_config = llm_config
 
+            self._current_llm.load_llm()
+            
         return self._current_llm
 
     def remove_llm(self):

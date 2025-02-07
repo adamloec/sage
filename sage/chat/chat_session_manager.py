@@ -40,18 +40,6 @@ class ChatSessionManager:
             self.sessions[session.session_id] = session
             return session
     
-    async def save_message(self, session_id: str, message: ChatMessage):
-        """Save a message to the database"""
-        async with self.get_db() as db:
-            db_message = ChatMessageDB(
-                session_id=session_id,
-                role=message.role,
-                content=message.content,
-                timestamp=message.timestamp,
-            )
-            db.add(db_message)
-            await db.commit()
-    
     def get_session(self, session_id: str) -> Optional[ChatSession]:
         return self.sessions.get(session_id)
     
