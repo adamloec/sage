@@ -1,11 +1,14 @@
 from contextlib import asynccontextmanager
 import os
+from pathlib import Path
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from .db_models import Base
 
-# Get database path from environment
-DB_PATH = os.environ.get('SAGE_DB_PATH')
+# Get database path from environment or use default
+package_dir = Path(__file__).parent
+default_db_path = f"sqlite+aiosqlite:///{package_dir}/session_history.db"
+DB_PATH = os.environ.get('SAGE_DB_PATH', default_db_path)
 
 # Ensure the database directory exists
 db_url = DB_PATH.replace('sqlite+aiosqlite:///', '')
