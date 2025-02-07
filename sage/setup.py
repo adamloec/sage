@@ -17,7 +17,7 @@ setup(
     python_requires=">=3.12",
     entry_points={
         "console_scripts": [
-            "sage-server=sage.main:run_server",
+            "sage=sage.server:run",
         ],
     }
 ) 
