@@ -6,13 +6,15 @@
   "icon": "images/logo.jpg",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.80.0"
+    "vscode": "^1.97.0"
   },
-  "categories": ["Other"],
+  "categories": [
+    "Other"
+  ],
   "activationEvents": [
     "onStartupFinished"
   ],
-  "main": "./src/extension.js",
+  "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
@@ -30,13 +32,49 @@
         "key": "ctrl+shift+s",
         "mac": "cmd+shift+s"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Sage",
+      "properties": {
+        "sage.modelConfig.modelName": {
+          "type": "string",
+          "default": "",
+          "description": "Name of the language model to use"
+        },
+        "sage.modelConfig.modelPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the language model file"
+        },
+        "sage.modelConfig.contextWindow": {
+          "type": "integer",
+          "default": 4096,
+          "description": "Context window size for the model"
+        },
+        "sage.modelConfig.maxTokens": {
+          "type": "integer",
+          "default": 2048,
+          "description": "Maximum number of tokens for model output"
+        }
+      }
+    },
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/adamloec/sage.git"
+    }
   },
   "dependencies": {
+    "axios": "^1.7.9",
     "python-shell": "^5.0.0"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/adamloec/sage.git"
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/axios": "^0.9.36",
+    "@types/node": "^16.18.126",
+    "@types/vscode": "^1.97.0",
+    "typescript": "^4.9.5"
   }
 }

@@ -1,8 +1,8 @@
-const vscode = require('vscode');
+import * as vscode from 'vscode';
 const { BackendInstaller } = require('./installation');
 const { SagePanel } = require('./panel/panel');
 
-function registerCommands(context) {
+function registerCommands(context: vscode.ExtensionContext) {
     // Install backend command
     const installCommand = vscode.commands.registerCommand('sage.installBackend', async () => {
         console.log('Install command triggered');
@@ -22,7 +22,7 @@ function registerCommands(context) {
     );
 }
 
-async function activate(context) {
+async function activate(context: vscode.ExtensionContext) {
     console.log('Sage extension activating...');
 
     // Register all commands
