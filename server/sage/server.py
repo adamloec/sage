@@ -34,9 +34,16 @@ app.include_router(chat_router, prefix="/api")
 app.include_router(llm_router, prefix="/api")
 
 def run(host, port, reload):
-    uvicorn.run(
-        "sage.server:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=False
-    )
+    print(f"Starting Sage server on {host}:{port}")
+    try:
+        uvicorn.run(
+            "sage.server:app",
+            host=host,
+            port=port,
+            reload=reload,
+            log_level="info",
+            access_log=True
+        )
+    except Exception as e:
+        print(f"Server failed to start: {e}")
+        raise
