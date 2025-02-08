@@ -1,6 +1,9 @@
 from fastapi import APIRouter, HTTPException, Request
 from sage.api.dto import LLMConfig
 from typing import Dict, Optional
+from sage.chat.db.db_models import LLMConfigDB
+from sage.chat.db.database import get_db
+from sqlalchemy import select
 
 router = APIRouter()
 
@@ -43,3 +46,31 @@ async def get_llm(request: Request):
             status_code=500,
             detail=f"Failed to get model configuration: {str(e)}"
         )
+
+@router.get("/llm/configs")
+async def get_llm_configs(request: Request):
+    """Get all saved LLM configurations"""
+    async with get_db() as session:
+        result = await session.execute(select(LLMConfigDB))
+        configs = result.scalars().all()
+        return configs
+
+@router.post("/llm/configs")
+async def create_llm_config(request: Request, config: LLMConfig):
+    """Save a new LLM configuration"""
+    async with get_db() as session:
+        db_config = LLMConfigDB(**config.dict())
+        session.add(db_config)
+        await session.commit()
+        return db_config
+
+@router.delete("/llm/configs/{config_id}")
+async def delete_llm_config(request: Request, config_id: int):
+    """Delete a saved LLM configuration"""
+    async with get_db() as session:
+        config = await session.get(LLMConfigDB, config_id)
+        if not config:
+            raise HTTPException(status_code=404, detail="Configuration not found")
+        await session.delete(config)
+        await session.commit()
+        return {"message": "Configuration deleted successfully"}
