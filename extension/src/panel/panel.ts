@@ -19,7 +19,7 @@ class SagePanel {
         this._currentSessionId = undefined;
     }
 
-    static createOrShow(context: vscode.ExtensionContext) {
+    static async createOrShow(context: vscode.ExtensionContext) {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : vscode.ViewColumn.Two;
@@ -42,7 +42,7 @@ class SagePanel {
 
         SagePanel.currentPanel = new SagePanel(context);
         SagePanel.currentPanel._panel = panel;
-        SagePanel.currentPanel._initialize();
+        await SagePanel.currentPanel._initialize();
 
         // Handle panel disposal
         panel.onDidDispose(
@@ -51,9 +51,11 @@ class SagePanel {
                     // Stop the server and clean up
                     if (SagePanel.currentPanel) {
                         await SagePanel.currentPanel.dispose();
+                        vscode.window.showInformationMessage('Sage server stopped successfully');
                     }
-                } catch (error) {
+                } catch (error: any) {
                     console.error('Error during panel disposal:', error);
+                    vscode.window.showErrorMessage(`Failed to stop server: ${error.message}`);
                 }
             },
             null,
@@ -68,118 +70,101 @@ class SagePanel {
             return;
         }
 
-        this._updateContent('', false);
+        // Show initial starting status
+        this._updateContent('Starting server...', false);
+        
+        // Start server automatically
+        try {
+            await this._serverManager.startServer();
+            // Update both the panel content and show notification after successful start
+            this._updateContent('Server running', true);
+            vscode.window.showInformationMessage('Sage server started successfully');
+            this._panel?.webview.postMessage({ 
+                command: 'showStatus', 
+                message: 'Server started successfully' 
+            });
 
-        // Add message handler for button clicks
-        this._panel.webview.onDidReceiveMessage(
-            async (message: { command: string; text?: string }) => {
-                switch (message.command) {
-                    case 'startServer':
-                        try {
-                            await this._serverManager.startServer();
-                            this._updateContent('', true);
-                            this._panel?.webview.postMessage({ 
-                                command: 'showStatus', 
-                                message: 'Server started successfully' 
-                            });
-                        } catch (error: any) {
-                            const errorMessage = `Failed to start server: ${error.message}`;
-                            console.error(errorMessage);
-                            this._updateContent('', false);
-                            this._panel?.webview.postMessage({ 
-                                command: 'showError', 
-                                message: errorMessage 
-                            });
-                        }
-                        break;
+            // Add message handler for button clicks
+            this._panel.webview.onDidReceiveMessage(
+                async (message: { command: string; text?: string }) => {
+                    switch (message.command) {
+                        case 'openSettings':
+                            vscode.commands.executeCommand('workbench.action.openSettings', 'sage');
+                            break;
 
-                    case 'stopServer':
-                        try {
-                            await this._serverManager.stopServer();
-                            this._updateContent('', false);
-                            this._panel?.webview.postMessage({ 
-                                command: 'showStatus', 
-                                message: 'Server stopped successfully' 
-                            });
-                        } catch (error: any) {
-                            console.error('Error stopping server:', error);
-                            this._updateContent('', false);
-                            this._panel?.webview.postMessage({ 
-                                command: 'showError', 
-                                message: `Error stopping server: ${error.message}` 
-                            });
-                        }
-                        break;
+                        case 'openConfig':
+                            ConfigPanel.createOrShow();
+                            break;
 
-                    case 'openSettings':
-                        vscode.commands.executeCommand('workbench.action.openSettings', 'sage');
-                        break;
+                        case 'sendMessage':
+                            try {
+                                // Check if model is loaded first
+                                const modelResponse = await axios.get('http://localhost:8000/llm');
+                                if (!modelResponse.data?.model_name) {
+                                    this._panel?.webview.postMessage({ 
+                                        command: 'showError', 
+                                        message: 'Please load a model before sending messages' 
+                                    });
+                                    // Clear the pending message from UI
+                                    this._panel?.webview.postMessage({ 
+                                        command: 'clearPendingMessage' 
+                                    });
+                                    return;
+                                }
 
-                    case 'openConfig':
-                        ConfigPanel.createOrShow();
-                        break;
+                                // If we have a model and message text, proceed with chat
+                                if (message.text) {
+                                    // Create session if this is the first message
+                                    if (!this._currentSessionId) {
+                                        const sessionResponse = await axios.post('http://localhost:8000/chat/sessions');
+                                        this._currentSessionId = sessionResponse.data.session_id;
+                                        // Load initial chat history
+                                        this._panel?.webview.postMessage({
+                                            command: 'updateChatHistory',
+                                            messages: sessionResponse.data.messages
+                                        });
+                                    }
 
-                    case 'sendMessage':
-                        try {
-                            // Check if model is loaded first
-                            const modelResponse = await axios.get('http://localhost:8000/llm');
-                            if (!modelResponse.data?.model_name) {
+                                    // Send the message
+                                    const response = await axios.post(`http://localhost:8000/chat/sessions/${this._currentSessionId}/messages`, {
+                                        content: message.text
+                                    });
+
+                                    // Update UI with the new message
+                                    if (response.data.message) {
+                                        this._panel?.webview.postMessage({
+                                            command: 'addMessage',
+                                            message: response.data.message
+                                        });
+                                    }
+                                }
+                            } catch (error: any) {
+                                console.error('Error sending message:', error);
                                 this._panel?.webview.postMessage({ 
                                     command: 'showError', 
-                                    message: 'Please load a model before sending messages' 
+                                    message: `Error sending message: ${error.message}` 
                                 });
                                 // Clear the pending message from UI
                                 this._panel?.webview.postMessage({ 
                                     command: 'clearPendingMessage' 
                                 });
-                                return;
                             }
-
-                            // If we have a model and message text, proceed with chat
-                            if (message.text) {
-                                // Create session if this is the first message
-                                if (!this._currentSessionId) {
-                                    const sessionResponse = await axios.post('http://localhost:8000/chat/sessions');
-                                    this._currentSessionId = sessionResponse.data.session_id;
-                                    // Load initial chat history
-                                    this._panel?.webview.postMessage({
-                                        command: 'updateChatHistory',
-                                        messages: sessionResponse.data.messages
-                                    });
-                                }
-
-                                // Send the message
-                                const response = await axios.post(`http://localhost:8000/chat/sessions/${this._currentSessionId}/messages`, {
-                                    content: message.text
-                                });
-
-                                // Update UI with the new message
-                                if (response.data.message) {
-                                    this._panel?.webview.postMessage({
-                                        command: 'addMessage',
-                                        message: response.data.message
-                                    });
-                                }
-                            }
-                        } catch (error: any) {
-                            console.error('Error sending message:', error);
-                            this._panel?.webview.postMessage({ 
-                                command: 'showError', 
-                                message: `Error sending message: ${error.message}` 
-                            });
-                            // Clear the pending message from UI
-                            this._panel?.webview.postMessage({ 
-                                command: 'clearPendingMessage' 
-                            });
-                        }
-                        break;
-                }
-            },
-            undefined,
-            this._disposables
-        );
-
-        this._updateContent('', false);
+                            break;
+                    }
+                },
+                undefined,
+                this._disposables
+            );
+        } catch (error: any) {
+            const errorMessage = `Failed to start server: ${error.message}`;
+            console.error(errorMessage);
+            this._updateContent('Server stopped', false);
+            vscode.window.showErrorMessage(errorMessage);
+            this._panel?.webview.postMessage({ 
+                command: 'showError', 
+                message: errorMessage 
+            });
+        }
     }
 
     _updateContent(status: string, isRunning: boolean = false) {
@@ -216,21 +201,19 @@ class SagePanel {
         </head>
         <body class="bg-dark-grey text-gray-200 h-screen">
             <div class="container mx-auto max-w-4xl h-full flex flex-col p-6">
+                <!-- Server Status Text -->
+                <div class="w-[90%] mx-auto mb-2 text-sm">
+                    <span class="${isRunning ? 'text-green-500' : 'text-red-500'}">
+                        ${status || (isRunning ? 'Server running' : 'Server stopped')}
+                    </span>
+                </div>
+
                 <!-- Status Bar -->
                 <div class="w-[90%] mx-auto mb-2 p-4 bg-light-grey rounded-xl flex justify-between items-center shadow-lg">
                     <div class="flex items-center gap-4">
-                        <button 
-                            id="serverToggle"
-                            class="px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-2
-                                   ${isRunning 
-                                     ? 'bg-red-500 hover:bg-red-600' 
-                                     : 'bg-green-500 hover:bg-green-600'}"
-                            onclick="${isRunning ? 'stopServer()' : 'startServer()'}">
-                            <span>${isRunning ? 'Stop Server' : 'Start Server'}</span>
-                        </button>
-                    </div>
-                    <div id="modelStatus" class="text-gray-400">
-                        No model loaded
+                        <div id="modelStatus" class="text-gray-400">
+                            No model loaded
+                        </div>
                     </div>
                     <button 
                         class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
@@ -243,7 +226,7 @@ class SagePanel {
                 <div id="statusMessages" class="w-[90%] mx-auto fixed left-1/2 -translate-x-1/2 bottom-32 flex flex-col items-center gap-2"></div>
 
                 <!-- Chat History -->
-                <div id="chatHistory" class="w-[90%] mx-auto flex-1 overflow-y-auto mb-24 p-4 bg-light-grey rounded-xl shadow-lg">
+                <div id="chatHistory" class="w-[90%] mx-auto flex-1 overflow-y-auto mb-24 p-4 rounded-xl shadow-lg">
                     <!-- Chat messages will be populated here -->
                 </div>
 
@@ -269,20 +252,6 @@ class SagePanel {
             <script>
                 const vscode = acquireVsCodeApi();
                 
-                function startServer() {
-                    const button = document.getElementById('serverToggle');
-                    button.disabled = true;
-                    button.classList.add('opacity-75', 'cursor-not-allowed');
-                    vscode.postMessage({ command: 'startServer' });
-                }
-                
-                function stopServer() {
-                    const button = document.getElementById('serverToggle');
-                    button.disabled = true;
-                    button.classList.add('opacity-75', 'cursor-not-allowed');
-                    vscode.postMessage({ command: 'stopServer' });
-                }
-
                 function showStatusMessage(message, isError = false) {
                     const statusDiv = document.getElementById('statusMessages');
                     const messageEl = document.createElement('div');
@@ -305,9 +274,9 @@ class SagePanel {
                     }, 3000);
 
                     // Re-enable the server toggle button
-                    const button = document.getElementById('serverToggle');
-                    button.disabled = false;
-                    button.classList.remove('opacity-75', 'cursor-not-allowed');
+                    const button = document.getElementById('serverStatus');
+                    button.classList.remove('bg-red-500', 'bg-green-500');
+                    button.classList.add(isError ? 'bg-red-500' : 'bg-green-500');
                 }
 
                 // Add message handler for server responses

@@ -1,6 +1,17 @@
 import * as vscode from 'vscode';
+import axios from 'axios';
 const { BackendInstaller } = require('./installation');
 const { SagePanel } = require('./panel/panel');
+const { ConnectionPanel } = require('./panel/connection_panel');
+
+async function checkBackendConnection(backendUrl: string = 'http://localhost:8000'): Promise<boolean> {
+    try {
+        const response = await axios.get(`${backendUrl}/health`);
+        return response.status === 200;
+    } catch (error) {
+        return false;
+    }
+}
 
 function registerCommands(context: vscode.ExtensionContext) {
     // Install backend command
@@ -11,8 +22,21 @@ function registerCommands(context: vscode.ExtensionContext) {
     });
 
     // Open panel command
-    const openPanelCommand = vscode.commands.registerCommand('sage.openPanel', () => {
-        SagePanel.createOrShow(context);
+    const openPanelCommand = vscode.commands.registerCommand('sage.openPanel', async () => {
+        // Check if backend is configured
+        const config = vscode.workspace.getConfiguration('sage');
+        const backendUrl = config.get('backendUrl') as string;
+        
+        // Check connection
+        const isConnected = await checkBackendConnection(backendUrl);
+        
+        if (isConnected) {
+            // If connection successful, open main panel
+            SagePanel.createOrShow(context);
+        } else {
+            // If no connection or connection fails, show connection panel
+            ConnectionPanel.createOrShow(context);
+        }
     });
 
     // Add all commands to subscriptions
