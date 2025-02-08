@@ -7,7 +7,7 @@ def cli():
     pass
 
 @cli.command()
-@click.option('--host', default='127.0.0.1', help='The host to bind to')
+@click.option('--host', default='0.0.0.0', help='The host to bind to')
 @click.option('--port', default=8000, help='The port to bind to')
 @click.option('--reload/--no-reload', default=False, help='Enable auto-reload')
 def serve(host, port, reload):
