@@ -36,7 +36,7 @@ app.include_router(llm_router, prefix="/api")
 def run(host, port, reload):
     uvicorn.run(
         "sage.server:app",
-        host=host,
-        port=port,
-        reload=reload
+        host="0.0.0.0",
+        port=8000,
+        reload=False
     )
