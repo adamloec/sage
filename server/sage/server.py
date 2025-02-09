@@ -52,9 +52,12 @@ async def shutdown():
     """Gracefully shutdown the server"""
     print("Shutdown requested - initiating graceful shutdown")
     
-    # Cleanup resources
-    await app.state.llm_manager.remove_llm()
-    await app.state.chat_session_manager.clear_sessions()
+    # Cleanup resources - safely handle None cases
+    if hasattr(app.state, 'llm_manager'):
+        await app.state.llm_manager.remove_llm()
+    
+    if hasattr(app.state, 'chat_session_manager'):
+        await app.state.chat_session_manager.clear_sessions()
     
     # Set shutdown event
     shutdown_event.set()
