@@ -39,7 +39,7 @@ async def remove_llm(request: Request):
 async def get_llm(request: Request):
     """Get the current llm configuration"""
     try:
-        config = request.app.state.llm_manager.get_current_llm()
+        config = request.app.state.llm_manager.get_current_config()
         return config
     except Exception as e:
         raise HTTPException(
