@@ -86,10 +86,15 @@ class BackendInstaller {
 
     async installWithVenv(envName: string) {
         try {
-            const envPath = path.join(this.extensionPath, envName);
+            // Use global storage path for the environment
+            const envPath = path.join(this.context.globalStorageUri.fsPath, envName);
+            
+            // Ensure the directory exists
+            await fs.promises.mkdir(path.dirname(envPath), { recursive: true });
+            
             const pythonCommand = process.platform === 'win32' 
-                ? 'C:\\Users\\%USERNAME%\\AppData\\Local\\Programs\\Python\\Python312\\python.exe'  // Windows
-                : '/usr/local/bin/python3';    // macOS/Linux
+                ? 'C:\\Users\\%USERNAME%\\AppData\\Local\\Programs\\Python\\Python312\\python.exe'
+                : '/usr/local/bin/python3';
 
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
@@ -140,7 +145,7 @@ class BackendInstaller {
 
     async isInstalled(): Promise<boolean> {
         try {
-            const envPath = path.join(this.extensionPath, this.ENV_NAME);
+            const envPath = path.join(this.context.globalStorageUri.fsPath, this.ENV_NAME);
             const pythonPath = process.platform === 'win32' ? 
                 path.join(envPath, 'Scripts', 'python.exe') :
                 path.join(envPath, 'bin', 'python');

@@ -52,17 +52,27 @@ async def shutdown():
     """Gracefully shutdown the server"""
     print("Shutdown requested - initiating graceful shutdown")
     
-    # Cleanup resources - safely handle None cases
-    if hasattr(app.state, 'llm_manager'):
-        await app.state.llm_manager.remove_llm()
-    
-    if hasattr(app.state, 'chat_session_manager'):
-        await app.state.chat_session_manager.clear_sessions()
-    
-    # Set shutdown event
-    shutdown_event.set()
-    
-    return {"message": "Server shutting down"}
+    try:
+        # Safely cleanup resources only if they exist and are initialized
+        if hasattr(app.state, 'llm_manager') and app.state.llm_manager is not None:
+            try:
+                await app.state.llm_manager.remove_llm()
+            except Exception as e:
+                print(f"Error cleaning up LLM manager: {e}")
+        
+        if hasattr(app.state, 'chat_session_manager') and app.state.chat_session_manager is not None:
+            try:
+                await app.state.chat_session_manager.clear_sessions()
+            except Exception as e:
+                print(f"Error cleaning up chat sessions: {e}")
+        
+        # Signal the shutdown event
+        shutdown_event.set()
+        
+        return {"message": "Server shutdown initiated"}
+    except Exception as e:
+        print(f"Error during shutdown: {e}")
+        return {"message": f"Shutdown initiated with errors: {str(e)}"}
 
 # Include routers
 app.include_router(chat_router, prefix="/api")
@@ -108,20 +118,28 @@ def run(host, port, reload):
     # Handle shutdown signal
     async def watch_shutdown():
         await shutdown_event.wait()
+        print("Shutdown event received, stopping server...")
         server.should_exit = True
-        await server.shutdown()
+        try:
+            await server.shutdown()
+        except Exception as e:
+            print(f"Error during server shutdown: {e}")
     
-    # Setup signal handlers
+    # Setup signal handlers for SIGTERM and SIGINT
     def signal_handler(signum, frame):
         print(f"Received signal {signum}")
-        asyncio.create_task(shutdown())
+        # Use create_task to avoid blocking in signal handler
+        loop = asyncio.get_event_loop()
+        loop.create_task(shutdown())
     
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
     
     try:
         # Run the server with shutdown watcher
-        asyncio.get_event_loop().run_until_complete(
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(
             asyncio.gather(
                 server.serve(),
                 watch_shutdown()
@@ -132,3 +150,7 @@ def run(host, port, reload):
         raise
     finally:
         print("Server shutdown complete")
+        try:
+            loop.close()
+        except Exception as e:
+            print(f"Error closing event loop: {e}")

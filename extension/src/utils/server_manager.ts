@@ -165,7 +165,7 @@ class ServerManager {
 
     async _getStartCommand() {
         try {
-            const envPath = path.join(this._context.extensionPath, this._envName);
+            const envPath = path.join(this._context.globalStorageUri.fsPath, this._envName);
             const sagePath = process.platform === 'win32' ?
                 path.join(envPath, 'Scripts', 'sage.exe') :
                 path.join(envPath, 'bin', 'sage');
