@@ -4,6 +4,7 @@ const util = require('util');
 const execAsync = util.promisify(exec);
 const { platform } = require('os');
 const path = require('path');
+const axios = require('axios');
 
 class ServerManager {
     private _context: vscode.ExtensionContext;
@@ -98,9 +99,54 @@ class ServerManager {
         }
 
         console.log('=== Stopping server ===');
-        console.log('Killing process:', this._process.pid);
-        this._process.kill();
+        
+        const process = this._process;
         this._process = null;
+
+        try {
+            // First try graceful shutdown via API endpoint
+            try {
+                await axios.post('http://localhost:' + this._port + '/api/shutdown');
+                console.log('Graceful shutdown initiated');
+            } catch (error) {
+                console.log('Graceful shutdown failed, falling back to process termination');
+                // Send SIGTERM signal
+                process.kill('SIGTERM');
+            }
+
+            // Wait for process to exit
+            await new Promise<void>((resolve) => {
+                const cleanup = () => {
+                    console.log('Process exited successfully');
+                    resolve();
+                };
+
+                process.once('exit', cleanup);
+
+                // If process hasn't exited after 3 seconds, force kill as last resort
+                setTimeout(() => {
+                    process.removeListener('exit', cleanup);
+                    if (process.platform === 'win32') {
+                        try {
+                            execAsync(`taskkill /F /T /PID ${process.pid}`);
+                        } catch (error) {
+                            console.log('Force kill failed:', error);
+                        }
+                    } else {
+                        try {
+                            process.kill('SIGKILL');
+                        } catch (error) {
+                            console.log('Force kill failed:', error);
+                        }
+                    }
+                    console.log('Process kill timed out, forced termination');
+                    resolve();
+                }, 3000);
+            });
+        } catch (error) {
+            console.log('Error during server shutdown:', error);
+        }
+
         console.log('Server stopped');
     }
 

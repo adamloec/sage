@@ -1,20 +1,5 @@
 import platform
-import subprocess
-import sys
-import re
-from setuptools import setup, find_packages
-
-def get_cuda_version_from_nvcc():
-    try:
-        output = subprocess.check_output(['nvcc', '--version']).decode('utf-8')
-        # Example output: "Cuda compilation tools, release 11.8, V11.8.89"
-        match = re.search(r'release (\d+\.\d+)', output)
-        if match:
-            version = match.group(1)
-            return ''.join(version.split('.'))  # e.g., '11.8' -> '118'
-        return None
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return None
+from setuptools import setup, find_packages 
 
 def get_torch_requirements():
     system = platform.system().lower()

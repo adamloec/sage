@@ -21,7 +21,7 @@ class BackendInstaller {
         try {
             // Use system Python paths instead of relying on PATH
             const pythonCommand = process.platform === 'win32' 
-                ? 'C:\\Python312\\python.exe'  // Windows
+                ? 'C:\\Users\\%USERNAME%\\AppData\\Local\\Programs\\Python\\Python312\\python.exe'  // Windows
                 : '/usr/local/bin/python3';    // macOS/Linux
 
             const { stdout } = await execAsync(`"${pythonCommand}" --version`);
@@ -88,7 +88,7 @@ class BackendInstaller {
         try {
             const envPath = path.join(this.extensionPath, envName);
             const pythonCommand = process.platform === 'win32' 
-                ? 'C:\\Python312\\python.exe'  // Windows
+                ? 'C:\\Users\\%USERNAME%\\AppData\\Local\\Programs\\Python\\Python312\\python.exe'  // Windows
                 : '/usr/local/bin/python3';    // macOS/Linux
 
             await vscode.window.withProgress({

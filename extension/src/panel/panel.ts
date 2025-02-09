@@ -425,11 +425,32 @@ export class SagePanel {
     }
 
     async dispose() {
-        await this._serverManager.stopServer();
+        // Prevent multiple disposal attempts
+        if (!this._panel) {
+            return;
+        }
 
-        // Clean up resources
-        this._panel?.dispose();
-        this._panel = undefined;
+        try {
+            // Stop server first
+            await this._serverManager.stopServer();
+        } catch (error) {
+            console.error('Error stopping server during disposal:', error);
+        }
+
+        // Clean up panel resources
+        while (this._disposables.length) {
+            const disposable = this._disposables.pop();
+            if (disposable) {
+                disposable.dispose();
+            }
+        }
+
+        // Dispose panel last
+        if (this._panel) {
+            this._panel.dispose();
+            this._panel = undefined;
+        }
+        
         SagePanel.currentPanel = undefined;
     }
 }
