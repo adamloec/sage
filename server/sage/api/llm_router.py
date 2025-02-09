@@ -59,7 +59,7 @@ async def get_llm_configs(request: Request):
 async def create_llm_config(request: Request, config: LLMConfig):
     """Save a new LLM configuration"""
     async with get_db() as session:
-        db_config = LLMConfigDB(**config.dict())
+        db_config = LLMConfigDB(**config.model_dump())
         session.add(db_config)
         await session.commit()
         return db_config

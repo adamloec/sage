@@ -1,11 +1,10 @@
 import * as vscode from 'vscode';
 const { ServerManager } = require('../utils/server_manager');
 const axios = require('axios');
-const { ConfigPanel } = require('./config_panel');
 const { MessageManager } = require('../utils/message_manager');
-const { LLMPanel } = require('./llm_panel');
+import { getSettingsModalHtml, getSettingsModalScripts } from './settings_modal';
 
-class SagePanel {
+export class SagePanel {
     private _context: vscode.ExtensionContext;
     private _panel: vscode.WebviewPanel | undefined;
     private _serverManager: typeof ServerManager;
@@ -23,6 +22,16 @@ class SagePanel {
     }
 
     static async createOrShow(context: vscode.ExtensionContext) {
+        const { BackendInstaller } = require('../installation');
+        const installer = new BackendInstaller(context);
+        const isInstalled = await installer.isInstalled();
+
+        // If backend is not installed, show connection panel
+        if (!isInstalled) {
+            vscode.commands.executeCommand('sage.openConnectionPanel');
+            return;
+        }
+
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : vscode.ViewColumn.Two;
@@ -99,17 +108,9 @@ class SagePanel {
             this._panel.webview.onDidReceiveMessage(
                 async (message: { command: string; text?: string }) => {
                     switch (message.command) {
-                        case 'openSettings':
-                            vscode.commands.executeCommand('workbench.action.openSettings', 'sage');
-                            break;
-
-                        case 'openConfig':
-                            ConfigPanel.createOrShow();
-                            break;
 
                         case 'sendMessage':
                             try {
-                                // Check if model is loaded first
                                 const modelResponse = await axios.get('http://localhost:8000/api/llm');
                                 if (!modelResponse.data?.model_name) {
                                     MessageManager.showError('Load a model before attempting to use the chat.');
@@ -171,8 +172,18 @@ class SagePanel {
                             }
                             break;
 
-                        case 'openLLMSettings':
-                            LLMPanel.createOrShow();
+                        case 'openSettings':
+                            if (vscode.workspace.getConfiguration('sage').get('standalone')) {
+                                if (this._panel) {
+                                    this._panel.webview.postMessage({ command: 'openSettings' });
+                                }
+                            }
+                            break;
+
+                        case 'openConfig':
+                            if (vscode.workspace.getConfiguration('sage').get('standalone')) {
+                                vscode.commands.executeCommand('sage.openConnectionPanel');
+                            }
                             break;
                     }
                 },
@@ -193,8 +204,6 @@ class SagePanel {
                     message: errorMessage 
                 });
             }
-            
-            // Re-throw the error to ensure proper cleanup
             throw error;
         } finally {
             this._isInitializing = false;
@@ -249,11 +258,13 @@ class SagePanel {
                             No model loaded
                         </div>
                     </div>
-                    <button 
-                        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
-                        onclick="openLLMSettings()">
-                        LLM Settings
-                    </button>
+                    ${vscode.workspace.getConfiguration('sage').get('standalone') ? `
+                        <button 
+                            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
+                            onclick="openSettings()">
+                            <i class="fas fa-cog mr-2"></i>Settings
+                        </button>
+                    ` : ''}
                 </div>
 
                 <!-- Chat History -->
@@ -279,6 +290,9 @@ class SagePanel {
                     </div>
                 </div>
             </div>
+
+            <!-- Settings Modal (only included in standalone mode) -->
+            ${vscode.workspace.getConfiguration('sage').get('standalone') ? getSettingsModalHtml() : ''}
 
             <script>
                 const vscode = acquireVsCodeApi();
@@ -385,51 +399,37 @@ class SagePanel {
                 });
 
                 function openSettings() {
-                    vscode.postMessage({ command: 'openSettings' });
+                    document.getElementById('settingsModal').classList.remove('hidden');
+                    updateSettingsStatus();
                 }
 
-                function openConfig() {
+                function closeSettings() {
+                    document.getElementById('settingsModal').classList.add('hidden');
+                }
+
+                function openConfigFile() {
                     vscode.postMessage({ command: 'openConfig' });
                 }
 
-                function checkModelStatus() {
-                    vscode.postMessage({ command: 'checkModelStatus' });
-                }
+                // Close modal when clicking outside
+                document.getElementById('settingsModal').addEventListener('click', (e) => {
+                    if (e.target.id === 'settingsModal') {
+                        closeSettings();
+                    }
+                });
 
-                function openLLMSettings() {
-                    vscode.postMessage({ command: 'openLLMSettings' });
-                }
-
-                // Check model status every 5 seconds when server is running
-                setInterval(checkModelStatus, 5000);
-                // Initial check
-                checkModelStatus();
+                ${vscode.workspace.getConfiguration('sage').get('standalone') ? getSettingsModalScripts() : ''}
             </script>
         </body>
         </html>`;
     }
 
     async dispose() {
-        // Stop the server first to ensure process cleanup
-        try {
-            await this._serverManager.stopServer();
-        } catch (error) {
-            console.error('Error stopping server during disposal:', error);
-        }
+        await this._serverManager.stopServer();
 
-        // Then clean up the panel and other resources
-        if (this._panel) {
-            this._panel.dispose();
-            this._panel = undefined;
-        }
-
-        while (this._disposables.length) {
-            const disposable = this._disposables.pop();
-            if (disposable) {
-                disposable.dispose();
-            }
-        }
-
+        // Clean up resources
+        this._panel?.dispose();
+        this._panel = undefined;
         SagePanel.currentPanel = undefined;
     }
 }

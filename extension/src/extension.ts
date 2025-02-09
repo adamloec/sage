@@ -3,7 +3,6 @@ import axios from 'axios';
 const { BackendInstaller } = require('./installation');
 const { SagePanel } = require('./panel/panel');
 const { ConnectionPanel } = require('./panel/connection_panel');
-const { LLMPanel } = require('./panel/llm_panel');
 
 async function checkBackendConnection(backendUrl: string = 'http://localhost:8000'): Promise<boolean> {
     try {
@@ -31,18 +30,19 @@ function registerCommands(context: vscode.ExtensionContext) {
     const openPanelCommand = vscode.commands.registerCommand('sage.openPanel', async () => {
         const config = vscode.workspace.getConfiguration('sage');
         const backendUrl = config.get('backendUrl') as string;
+        const standalone = config.get('standalone') as boolean;
         
-        if (backendUrl && backendUrl !== 'http://localhost:8000') {
-            // For remote backends, check if they're actually running
-            const isConnected = await checkBackendConnection(backendUrl);
-            if (isConnected) {
+        if (standalone) {
+            // For standalone mode, check if backend is installed
+            const installed = await isBackendInstalled(context);
+            if (installed) {
                 SagePanel.createOrShow(context);
                 return;
             }
-        } else {
-            // For local backend, just check if it's installed
-            const installed = await isBackendInstalled(context);
-            if (installed) {
+        } else if (backendUrl && backendUrl !== 'http://localhost:8000') {
+            // For remote backends, check if they're actually running
+            const isConnected = await checkBackendConnection(backendUrl);
+            if (isConnected) {
                 SagePanel.createOrShow(context);
                 return;
             }
@@ -57,17 +57,11 @@ function registerCommands(context: vscode.ExtensionContext) {
         ConnectionPanel.createOrShow(context);
     });
 
-    // Open LLM panel command
-    const openLLMPanelCommand = vscode.commands.registerCommand('sage.openLLMPanel', () => {
-        LLMPanel.createOrShow();
-    });
-
     // Add all commands to subscriptions
     context.subscriptions.push(
         installCommand,
         openPanelCommand,
-        openConnectionPanelCommand,
-        openLLMPanelCommand
+        openConnectionPanelCommand
     );
 }
 

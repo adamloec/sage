@@ -3,7 +3,7 @@
   "displayName": "Sage",
   "publisher": "Sage",
   "description": "Sage coding assistant extension for VSCode",
-  "icon": "images/logo.jpg",
+  "icon": "images/logo.png",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.97.0"
@@ -45,35 +45,15 @@
     "configuration": {
       "title": "Sage",
       "properties": {
-        "sage.modelConfig.modelName": {
-          "type": "string",
-          "default": "",
-          "description": "Name of the language model to use"
-        },
-        "sage.modelConfig.modelPath": {
-          "type": "string",
-          "default": "",
-          "description": "Path to the language model file"
-        },
-        "sage.modelConfig.contextWindow": {
-          "type": "integer",
-          "default": 4096,
-          "description": "Context window size for the model"
-        },
-        "sage.modelConfig.maxTokens": {
-          "type": "integer",
-          "default": 2048,
-          "description": "Maximum number of tokens for model output"
-        },
         "sage.backendUrl": {
           "type": "string",
           "default": "http://localhost:8000",
           "description": "URL of the Sage backend server"
         },
-        "sage.useLocalBackend": {
+        "sage.standalone": {
           "type": "boolean",
           "default": false,
-          "description": "Whether to use the local backend installation"
+          "description": "Whether to run Sage in standalone mode with a local backend"
         }
       }
     },

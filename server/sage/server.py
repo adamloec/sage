@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from sage.llm.llm_manager import LLMManager
@@ -26,8 +27,16 @@ async def lifespan(app: FastAPI):
     app.state.llm_manager.remove_llm()
     app.state.chat_session_manager.clear_sessions()
 
-
 app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
 
 @app.get("/health")
 async def health_check():

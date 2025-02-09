@@ -43,12 +43,12 @@ class ConnectionPanel {
         const installer = new BackendInstaller(this._context);
         const isInstalled = await installer.isInstalled();
 
-        // Get current backend URL and local backend status from settings
+        // Get current backend URL and standalone status from settings
         const config = vscode.workspace.getConfiguration('sage');
         const currentBackendUrl = config.get('backendUrl') as string || '';
-        const useLocalBackend = config.get('useLocalBackend') as boolean;
+        const isStandalone = config.get('standalone') as boolean;
 
-        this._updateContent(isInstalled, currentBackendUrl, useLocalBackend);
+        this._updateContent(isInstalled, currentBackendUrl, isStandalone);
 
         this._panel.webview.onDidReceiveMessage(
             async (message) => {
@@ -60,7 +60,7 @@ class ConnectionPanel {
                             
                             // Update configurations
                             await vscode.workspace.getConfiguration().update('sage.backendUrl', 'http://localhost:8000', true);
-                            await vscode.workspace.getConfiguration().update('sage.useLocalBackend', true, true);
+                            await vscode.workspace.getConfiguration().update('sage.standalone', true, true);
                             this._panel?.dispose();
                             await vscode.commands.executeCommand('sage.openPanel');
                         } catch (error: any) {
@@ -70,9 +70,9 @@ class ConnectionPanel {
                     case 'connectBackend':
                         const ip = message.ip;
                         try {
-                            // Save the IP to settings and update local backend status
+                            // Save the IP to settings and update standalone status
                             await vscode.workspace.getConfiguration().update('sage.backendUrl', ip, true);
-                            await vscode.workspace.getConfiguration().update('sage.useLocalBackend', ip === 'http://localhost:8000', true);
+                            await vscode.workspace.getConfiguration().update('sage.standalone', ip === 'http://localhost:8000', true);
                             vscode.window.showInformationMessage('Backend URL configured!');
                             this._panel?.dispose();
                             await vscode.commands.executeCommand('sage.openPanel');
@@ -95,7 +95,7 @@ class ConnectionPanel {
         );
     }
 
-    private _updateContent(isInstalled: boolean, currentBackendUrl: string, useLocalBackend: boolean) {
+    private _updateContent(isInstalled: boolean, currentBackendUrl: string, isStandalone: boolean) {
         if (!this._panel) return;
 
         this._panel.webview.html = `<!DOCTYPE html>
@@ -128,7 +128,7 @@ class ConnectionPanel {
                     <div class="p-4 bg-lighter-grey rounded-lg">
                         <h2 class="font-semibold mb-2">Local Backend</h2>
                         ${isInstalled ? 
-                            useLocalBackend ? `
+                            isStandalone ? `
                                 <p class="text-sm text-green-500 mb-4">✓ Currently using local backend</p>
                             ` : `
                                 <p class="text-sm text-green-500 mb-4">✓ Local backend is installed</p>
@@ -154,7 +154,7 @@ class ConnectionPanel {
                         <input 
                             type="text" 
                             id="backendIp"
-                            value="${useLocalBackend ? '' : currentBackendUrl}"
+                            value="${isStandalone ? '' : currentBackendUrl}"
                             placeholder="Enter backend URL (e.g., http://localhost:8000)"
                             class="w-full p-2 mb-4 bg-dark-grey border border-border-grey rounded-md focus:outline-none focus:border-blue-500"
                         >
