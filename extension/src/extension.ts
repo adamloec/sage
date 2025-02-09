@@ -3,6 +3,7 @@ import axios from 'axios';
 const { BackendInstaller } = require('./installation');
 const { SagePanel } = require('./panel/panel');
 const { ConnectionPanel } = require('./panel/connection_panel');
+const { LLMPanel } = require('./panel/llm_panel');
 
 async function checkBackendConnection(backendUrl: string = 'http://localhost:8000'): Promise<boolean> {
     try {
@@ -11,6 +12,11 @@ async function checkBackendConnection(backendUrl: string = 'http://localhost:800
     } catch (error) {
         return false;
     }
+}
+
+async function isBackendInstalled(context: vscode.ExtensionContext): Promise<boolean> {
+    const installer = new BackendInstaller(context);
+    return installer.isInstalled();
 }
 
 function registerCommands(context: vscode.ExtensionContext) {
@@ -23,26 +29,45 @@ function registerCommands(context: vscode.ExtensionContext) {
 
     // Open panel command
     const openPanelCommand = vscode.commands.registerCommand('sage.openPanel', async () => {
-        // Check if backend is configured
         const config = vscode.workspace.getConfiguration('sage');
         const backendUrl = config.get('backendUrl') as string;
         
-        // Check connection
-        const isConnected = await checkBackendConnection(backendUrl);
-        
-        if (isConnected) {
-            // If connection successful, open main panel
-            SagePanel.createOrShow(context);
+        if (backendUrl && backendUrl !== 'http://localhost:8000') {
+            // For remote backends, check if they're actually running
+            const isConnected = await checkBackendConnection(backendUrl);
+            if (isConnected) {
+                SagePanel.createOrShow(context);
+                return;
+            }
         } else {
-            // If no connection or connection fails, show connection panel
-            ConnectionPanel.createOrShow(context);
+            // For local backend, just check if it's installed
+            const installed = await isBackendInstalled(context);
+            if (installed) {
+                SagePanel.createOrShow(context);
+                return;
+            }
         }
+
+        // If we get here, either the backend isn't installed or the remote connection failed
+        ConnectionPanel.createOrShow(context);
+    });
+
+    // Open connection panel command
+    const openConnectionPanelCommand = vscode.commands.registerCommand('sage.openConnectionPanel', () => {
+        ConnectionPanel.createOrShow(context);
+    });
+
+    // Open LLM panel command
+    const openLLMPanelCommand = vscode.commands.registerCommand('sage.openLLMPanel', () => {
+        LLMPanel.createOrShow();
     });
 
     // Add all commands to subscriptions
     context.subscriptions.push(
         installCommand,
-        openPanelCommand
+        openPanelCommand,
+        openConnectionPanelCommand,
+        openLLMPanelCommand
     );
 }
 

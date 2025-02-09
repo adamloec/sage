@@ -24,6 +24,10 @@
       {
         "command": "sage.openPanel",
         "title": "Sage: Open Assistant Panel"
+      },
+      {
+        "command": "sage.openConnectionPanel",
+        "title": "Sage: Configure Backend Connection"
       }
     ],
     "keybindings": [
@@ -31,6 +35,11 @@
         "command": "sage.openPanel",
         "key": "ctrl+shift+s",
         "mac": "cmd+shift+s"
+      },
+      {
+        "command": "sage.openConnectionPanel",
+        "key": "ctrl+shift+b",
+        "mac": "cmd+shift+b"
       }
     ],
     "configuration": {
@@ -55,6 +64,16 @@
           "type": "integer",
           "default": 2048,
           "description": "Maximum number of tokens for model output"
+        },
+        "sage.backendUrl": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "URL of the Sage backend server"
+        },
+        "sage.useLocalBackend": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to use the local backend installation"
         }
       }
     },

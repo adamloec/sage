@@ -133,6 +133,28 @@ class BackendInstaller {
             return false;
         }
     }
+
+    async isInstalled(): Promise<boolean> {
+        try {
+            const envPath = path.join(this.extensionPath, this.ENV_NAME);
+            const pythonPath = process.platform === 'win32' ? 
+                path.join(envPath, 'Scripts', 'python.exe') :
+                path.join(envPath, 'bin', 'python');
+            
+            // Check if the environment exists and sage package is importable
+            if (fs.existsSync(envPath)) {
+                try {
+                    await execAsync(`"${pythonPath}" -c "import sage"`);
+                    return true;
+                } catch (error) {
+                    return false;
+                }
+            }
+            return false;
+        } catch (error) {
+            return false;
+        }
+    }
 }
 
 module.exports = { BackendInstaller };

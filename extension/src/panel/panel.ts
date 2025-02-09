@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 const { ServerManager } = require('../utils/server_manager');
 const axios = require('axios');
 const { ConfigPanel } = require('./config_panel');
+const { MessageManager } = require('../utils/message_manager');
+const { LLMPanel } = require('./llm_panel');
 
 class SagePanel {
     private _context: vscode.ExtensionContext;
@@ -10,6 +12,7 @@ class SagePanel {
     private _disposables: vscode.Disposable[];
     static currentPanel: SagePanel | undefined;
     private _currentSessionId: string | undefined;
+    private _isInitializing: boolean = false;
 
     constructor(context: vscode.ExtensionContext) {
         this._context = context;
@@ -42,25 +45,26 @@ class SagePanel {
 
         SagePanel.currentPanel = new SagePanel(context);
         SagePanel.currentPanel._panel = panel;
-        await SagePanel.currentPanel._initialize();
 
-        // Handle panel disposal
+        // Handle panel disposal before initialization
         panel.onDidDispose(
             async () => {
                 try {
-                    // Stop the server and clean up
                     if (SagePanel.currentPanel) {
                         await SagePanel.currentPanel.dispose();
-                        vscode.window.showInformationMessage('Sage server stopped successfully');
+                        MessageManager.showInfo('Sage server stopped');
                     }
                 } catch (error: any) {
                     console.error('Error during panel disposal:', error);
-                    vscode.window.showErrorMessage(`Failed to stop server: ${error.message}`);
+                    MessageManager.showError(`Failed to stop server: ${error.message}`);
                 }
             },
             null,
             context.subscriptions
         );
+
+        // Initialize after setting up disposal handler
+        await SagePanel.currentPanel._initialize();
 
         return SagePanel.currentPanel;
     }
@@ -70,21 +74,28 @@ class SagePanel {
             return;
         }
 
-        // Show initial starting status
+        this._isInitializing = true;
         this._updateContent('Starting server...', false);
         
-        // Start server automatically
         try {
             await this._serverManager.startServer();
-            // Update both the panel content and show notification after successful start
+            
+            // Check if panel was disposed during initialization
+            if (!this._panel) {
+                console.log('Panel was disposed during initialization, cleaning up...');
+                await this._serverManager.stopServer();
+                this._isInitializing = false;
+                return;
+            }
+
             this._updateContent('Server running', true);
-            vscode.window.showInformationMessage('Sage server started successfully');
-            this._panel?.webview.postMessage({ 
+            MessageManager.showInfo('Sage server started successfully');
+            this._panel.webview.postMessage({ 
                 command: 'showStatus', 
                 message: 'Server started successfully' 
             });
 
-            // Add message handler for button clicks
+            // Add message handler for button clicks and status checks
             this._panel.webview.onDidReceiveMessage(
                 async (message: { command: string; text?: string }) => {
                     switch (message.command) {
@@ -99,13 +110,9 @@ class SagePanel {
                         case 'sendMessage':
                             try {
                                 // Check if model is loaded first
-                                const modelResponse = await axios.get('http://localhost:8000/llm');
+                                const modelResponse = await axios.get('http://localhost:8000/api/llm');
                                 if (!modelResponse.data?.model_name) {
-                                    this._panel?.webview.postMessage({ 
-                                        command: 'showError', 
-                                        message: 'Please load a model before sending messages' 
-                                    });
-                                    // Clear the pending message from UI
+                                    MessageManager.showError('Load a model before attempting to use the chat.');
                                     this._panel?.webview.postMessage({ 
                                         command: 'clearPendingMessage' 
                                     });
@@ -116,7 +123,7 @@ class SagePanel {
                                 if (message.text) {
                                     // Create session if this is the first message
                                     if (!this._currentSessionId) {
-                                        const sessionResponse = await axios.post('http://localhost:8000/chat/sessions');
+                                        const sessionResponse = await axios.post('http://localhost:8000/api/chat/sessions');
                                         this._currentSessionId = sessionResponse.data.session_id;
                                         // Load initial chat history
                                         this._panel?.webview.postMessage({
@@ -126,7 +133,7 @@ class SagePanel {
                                     }
 
                                     // Send the message
-                                    const response = await axios.post(`http://localhost:8000/chat/sessions/${this._currentSessionId}/messages`, {
+                                    const response = await axios.post(`http://localhost:8000/api/chat/sessions/${this._currentSessionId}/messages`, {
                                         content: message.text
                                     });
 
@@ -140,15 +147,32 @@ class SagePanel {
                                 }
                             } catch (error: any) {
                                 console.error('Error sending message:', error);
-                                this._panel?.webview.postMessage({ 
-                                    command: 'showError', 
-                                    message: `Error sending message: ${error.message}` 
-                                });
+                                MessageManager.showError(`Failed to send message: ${error.message}`);
                                 // Clear the pending message from UI
                                 this._panel?.webview.postMessage({ 
                                     command: 'clearPendingMessage' 
                                 });
                             }
+                            break;
+
+                        case 'checkModelStatus':
+                            try {
+                                const modelResponse = await axios.get('http://localhost:8000/api/llm');
+                                this._panel?.webview.postMessage({
+                                    command: 'updateModelStatus',
+                                    modelName: modelResponse.data?.model_name || null
+                                });
+                            } catch (error) {
+                                console.error('Error checking model status:', error);
+                                this._panel?.webview.postMessage({
+                                    command: 'updateModelStatus',
+                                    modelName: null
+                                });
+                            }
+                            break;
+
+                        case 'openLLMSettings':
+                            LLMPanel.createOrShow();
                             break;
                     }
                 },
@@ -156,14 +180,24 @@ class SagePanel {
                 this._disposables
             );
         } catch (error: any) {
-            const errorMessage = `Failed to start server: ${error.message}`;
-            console.error(errorMessage);
-            this._updateContent('Server stopped', false);
-            vscode.window.showErrorMessage(errorMessage);
-            this._panel?.webview.postMessage({ 
-                command: 'showError', 
-                message: errorMessage 
-            });
+            console.error('Initialization error:', error);
+            // Always attempt to stop the server on error
+            await this._serverManager.stopServer();
+            
+            if (this._panel) {
+                const errorMessage = `Failed to start server: ${error.message}`;
+                this._updateContent('Server stopped', false);
+                MessageManager.showError(errorMessage);
+                this._panel.webview.postMessage({ 
+                    command: 'showError', 
+                    message: errorMessage 
+                });
+            }
+            
+            // Re-throw the error to ensure proper cleanup
+            throw error;
+        } finally {
+            this._isInitializing = false;
         }
     }
 
@@ -217,13 +251,10 @@ class SagePanel {
                     </div>
                     <button 
                         class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
-                        onclick="openConfig()">
-                        Edit Config
+                        onclick="openLLMSettings()">
+                        LLM Settings
                     </button>
                 </div>
-                
-                <!-- Status Messages -->
-                <div id="statusMessages" class="w-[90%] mx-auto fixed left-1/2 -translate-x-1/2 bottom-32 flex flex-col items-center gap-2"></div>
 
                 <!-- Chat History -->
                 <div id="chatHistory" class="w-[90%] mx-auto flex-1 overflow-y-auto mb-24 p-4 rounded-xl shadow-lg">
@@ -251,44 +282,11 @@ class SagePanel {
 
             <script>
                 const vscode = acquireVsCodeApi();
-                
-                function showStatusMessage(message, isError = false) {
-                    const statusDiv = document.getElementById('statusMessages');
-                    const messageEl = document.createElement('div');
-                    messageEl.className = \`transform transition-all duration-300 ease-in-out px-4 py-2 rounded-lg shadow-lg bg-lighter-grey text-white\`;
-                    messageEl.textContent = message;
-                    
-                    // Add initial opacity class
-                    messageEl.classList.add('opacity-0', 'translate-y-[-20px]');
-                    statusDiv.appendChild(messageEl);
-                    
-                    // Animate in
-                    requestAnimationFrame(() => {
-                        messageEl.classList.remove('opacity-0', 'translate-y-[-20px]');
-                    });
-                    
-                    // Remove after 3 seconds
-                    setTimeout(() => {
-                        messageEl.classList.add('opacity-0', 'translate-y-[-20px]');
-                        setTimeout(() => messageEl.remove(), 300);
-                    }, 3000);
-
-                    // Re-enable the server toggle button
-                    const button = document.getElementById('serverStatus');
-                    button.classList.remove('bg-red-500', 'bg-green-500');
-                    button.classList.add(isError ? 'bg-red-500' : 'bg-green-500');
-                }
 
                 // Add message handler for server responses
                 window.addEventListener('message', event => {
                     const message = event.data;
                     switch (message.command) {
-                        case 'showStatus':
-                            showStatusMessage(message.message);
-                            break;
-                        case 'showError':
-                            showStatusMessage(message.message, true);
-                            break;
                         case 'clearPendingMessage':
                             // Do nothing - message wasn't added to UI yet
                             break;
@@ -338,6 +336,18 @@ class SagePanel {
                             });
                             history.scrollTop = history.scrollHeight;
                             break;
+                        case 'updateModelStatus':
+                            const modelStatus = document.getElementById('modelStatus');
+                            if (message.modelName) {
+                                modelStatus.textContent = message.modelName;
+                                modelStatus.classList.remove('text-gray-400');
+                                modelStatus.classList.add('text-white');
+                            } else {
+                                modelStatus.textContent = 'No model loaded';
+                                modelStatus.classList.remove('text-white');
+                                modelStatus.classList.add('text-gray-400');
+                            }
+                            break;
                     }
                 });
 
@@ -382,23 +392,12 @@ class SagePanel {
                     vscode.postMessage({ command: 'openConfig' });
                 }
 
-                async function checkModelStatus() {
-                    try {
-                        const response = await fetch('http://localhost:8000/llm');
-                        const data = await response.json();
-                        const modelStatus = document.getElementById('modelStatus');
-                        if (data && data.model_name) {
-                            modelStatus.textContent = data.model_name;
-                            modelStatus.classList.remove('text-gray-400');
-                            modelStatus.classList.add('text-white');
-                        } else {
-                            modelStatus.textContent = 'No model loaded';
-                            modelStatus.classList.remove('text-white');
-                            modelStatus.classList.add('text-gray-400');
-                        }
-                    } catch (error) {
-                        console.error('Failed to check model status:', error);
-                    }
+                function checkModelStatus() {
+                    vscode.postMessage({ command: 'checkModelStatus' });
+                }
+
+                function openLLMSettings() {
+                    vscode.postMessage({ command: 'openLLMSettings' });
                 }
 
                 // Check model status every 5 seconds when server is running
@@ -411,16 +410,26 @@ class SagePanel {
     }
 
     async dispose() {
+        // Stop the server first to ensure process cleanup
+        try {
+            await this._serverManager.stopServer();
+        } catch (error) {
+            console.error('Error stopping server during disposal:', error);
+        }
+
+        // Then clean up the panel and other resources
         if (this._panel) {
             this._panel.dispose();
+            this._panel = undefined;
         }
-        await this._serverManager.stopServer();
+
         while (this._disposables.length) {
             const disposable = this._disposables.pop();
             if (disposable) {
                 disposable.dispose();
             }
         }
+
         SagePanel.currentPanel = undefined;
     }
 }

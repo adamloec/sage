@@ -1,27 +1,28 @@
 import * as vscode from 'vscode';
 const axios = require('axios');
+const { MessageManager } = require('../utils/message_manager');
 
-class ConfigPanel {
+class LLMPanel {
     private _panel: vscode.WebviewPanel | undefined;
     private _disposables: vscode.Disposable[] = [];
-    static currentPanel: ConfigPanel | undefined;
+    static currentPanel: LLMPanel | undefined;
 
     static createOrShow() {
         const column = vscode.ViewColumn.Two;
 
-        if (ConfigPanel.currentPanel) {
-            ConfigPanel.currentPanel._panel?.reveal(column);
+        if (LLMPanel.currentPanel) {
+            LLMPanel.currentPanel._panel?.reveal(column);
             return;
         }
 
         const panel = vscode.window.createWebviewPanel(
-            'sageConfig',
-            'Sage Configuration',
+            'sageLLM',
+            'Sage LLM Settings',
             column,
             { enableScripts: true }
         );
 
-        ConfigPanel.currentPanel = new ConfigPanel(panel);
+        LLMPanel.currentPanel = new LLMPanel(panel);
     }
 
     private constructor(panel: vscode.WebviewPanel) {
@@ -34,29 +35,16 @@ class ConfigPanel {
             if (message.command === 'saveConfig') {
                 try {
                     const config = message.config;
-                    // Update VSCode settings
-                    const vscodeConfig = vscode.workspace.getConfiguration('sage');
-                    await vscodeConfig.update('modelConfig.modelName', config.model_name);
-                    await vscodeConfig.update('modelConfig.modelPath', config.model_path);
-                    await vscodeConfig.update('modelConfig.contextWindow', config.context_window);
-                    await vscodeConfig.update('modelConfig.maxTokens', config.max_tokens);
-                    await vscodeConfig.update('modelConfig.trustRemoteCode', config.trust_remote_code);
-                    await vscodeConfig.update('modelConfig.dtype', config.dtype);
-                    await vscodeConfig.update('modelConfig.temperature', config.temperature);
-                    await vscodeConfig.update('modelConfig.doSample', config.do_sample);
-                    await vscodeConfig.update('modelConfig.topP', config.top_p);
-                    await vscodeConfig.update('modelConfig.topK', config.top_k);
-
-                    // Make API call to update model config
-                    const response = await axios.put('http://localhost:8000/llm', config);
+                    // Save config via API
+                    const response = await axios.post('http://localhost:8000/api/llm/configs', config);
                     if (response.status !== 200) {
-                        throw new Error(`Failed to update model config: ${response.statusText}`);
+                        throw new Error(`Failed to save config: ${response.statusText}`);
                     }
 
-                    vscode.window.showInformationMessage('Configuration saved successfully!');
+                    MessageManager.showInfo('Configuration saved successfully!');
                     this._panel?.dispose();
                 } catch (error: any) {
-                    vscode.window.showErrorMessage(`Failed to save config: ${error.message}`);
+                    MessageManager.showError(`Failed to save config: ${error.message}`);
                 }
             }
         });
@@ -66,8 +54,7 @@ class ConfigPanel {
         if (!this._panel) return;
 
         try {
-            // Fetch saved models from the API
-            const response = await axios.get('http://localhost:8000/llm/configs');
+            const response = await axios.get('http://localhost:8000/api/llm/configs');
             const savedConfigs = response.data;
 
             this._panel.webview.html = `<!DOCTYPE html>
@@ -121,8 +108,7 @@ class ConfigPanel {
                                         </div>
                                     </div>
                                     <div class="mt-2 text-sm text-gray-400">
-                                        <div>Path: ${config.model_path}</div>
-                                        <div>Context Window: ${config.context_window}</div>
+                                        <div>Path: ${config.model_path || 'Not specified'}</div>
                                     </div>
                                 </div>
                             `).join('')}
@@ -138,20 +124,18 @@ class ConfigPanel {
                     `}
                         <div class="space-y-4">
                             <div>
-                                <label class="block mb-1">Model Name</label>
-                                <input type="text" id="modelName" class="w-full p-2 bg-lighter-grey border border-border-grey rounded-md">
+                                <label class="block mb-1">Model Name*</label>
+                                <input type="text" id="model_name" class="w-full p-2 bg-lighter-grey border border-border-grey rounded-md">
                             </div>
                             <div>
                                 <label class="block mb-1">Model Path</label>
-                                <input type="text" id="modelPath" class="w-full p-2 bg-lighter-grey border border-border-grey rounded-md">
+                                <input type="text" id="model_path" class="w-full p-2 bg-lighter-grey border border-border-grey rounded-md">
                             </div>
-                            <div>
-                                <label class="block mb-1">Context Window</label>
-                                <input type="number" id="contextWindow" class="w-full p-2 bg-lighter-grey border border-border-grey rounded-md">
-                            </div>
-                            <div>
-                                <label class="block mb-1">Max Tokens</label>
-                                <input type="number" id="maxTokens" class="w-full p-2 bg-lighter-grey border border-border-grey rounded-md">
+                            
+                            <h3 class="font-semibold mt-6">Core Model Parameters</h3>
+                            <div class="flex items-center space-x-2">
+                                <input type="checkbox" id="trust_remote_code" class="bg-lighter-grey border border-border-grey rounded">
+                                <label>Trust Remote Code</label>
                             </div>
                             <div>
                                 <label class="block mb-1">Data Type</label>
@@ -160,26 +144,53 @@ class ConfigPanel {
                                     <option value="float32">float32</option>
                                 </select>
                             </div>
+                            <div class="flex items-center space-x-2">
+                                <input type="checkbox" id="local_files_only" checked class="bg-lighter-grey border border-border-grey rounded">
+                                <label>Local Files Only</label>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <input type="checkbox" id="use_cache" checked class="bg-lighter-grey border border-border-grey rounded">
+                                <label>Use Cache</label>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <input type="checkbox" id="return_dict_in_generate" checked class="bg-lighter-grey border border-border-grey rounded">
+                                <label>Return Dict in Generate</label>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <input type="checkbox" id="output_attentions" class="bg-lighter-grey border border-border-grey rounded">
+                                <label>Output Attentions</label>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <input type="checkbox" id="output_hidden_states" class="bg-lighter-grey border border-border-grey rounded">
+                                <label>Output Hidden States</label>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <input type="checkbox" id="low_cpu_mem_usage" checked class="bg-lighter-grey border border-border-grey rounded">
+                                <label>Low CPU Memory Usage</label>
+                            </div>
+
+                            <h3 class="font-semibold mt-6">Generation Parameters</h3>
+                            <div>
+                                <label class="block mb-1">Max New Tokens</label>
+                                <input type="number" id="max_new_tokens" class="w-full p-2 bg-lighter-grey border border-border-grey rounded-md">
+                            </div>
                             <div>
                                 <label class="block mb-1">Temperature</label>
                                 <input type="number" id="temperature" step="0.1" min="0" max="2" class="w-full p-2 bg-lighter-grey border border-border-grey rounded-md">
                             </div>
+                            <div class="flex items-center space-x-2">
+                                <input type="checkbox" id="do_sample" class="bg-lighter-grey border border-border-grey rounded">
+                                <label>Do Sample</label>
+                            </div>
                             <div>
                                 <label class="block mb-1">Top P</label>
-                                <input type="number" id="topP" step="0.05" min="0" max="1" class="w-full p-2 bg-lighter-grey border border-border-grey rounded-md">
+                                <input type="number" id="top_p" step="0.05" min="0" max="1" class="w-full p-2 bg-lighter-grey border border-border-grey rounded-md">
                             </div>
                             <div>
                                 <label class="block mb-1">Top K</label>
-                                <input type="number" id="topK" step="1" min="0" class="w-full p-2 bg-lighter-grey border border-border-grey rounded-md">
+                                <input type="number" id="top_k" class="w-full p-2 bg-lighter-grey border border-border-grey rounded-md">
                             </div>
-                            <div class="flex items-center space-x-2">
-                                <input type="checkbox" id="trustRemoteCode" class="bg-lighter-grey border border-border-grey rounded">
-                                <label>Trust Remote Code</label>
-                            </div>
-                            <div class="flex items-center space-x-2">
-                                <input type="checkbox" id="doSample" class="bg-lighter-grey border border-border-grey rounded">
-                                <label>Do Sample</label>
-                            </div>
+
                             <button 
                                 class="w-full mt-6 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                                 onclick="saveConfig()">
@@ -200,6 +211,7 @@ class ConfigPanel {
                     function editConfig(config) {
                         document.getElementById('modelsList').classList.add('hidden');
                         document.getElementById('configForm').classList.remove('hidden');
+                        
                         // Populate form with config values
                         Object.keys(config).forEach(key => {
                             const element = document.getElementById(key);
@@ -222,16 +234,21 @@ class ConfigPanel {
 
                     function saveConfig() {
                         const config = {
-                            model_name: document.getElementById('modelName').value,
-                            model_path: document.getElementById('modelPath').value,
-                            context_window: parseInt(document.getElementById('contextWindow').value),
-                            max_tokens: parseInt(document.getElementById('maxTokens').value),
-                            trust_remote_code: document.getElementById('trustRemoteCode').checked,
+                            model_name: document.getElementById('model_name').value,
+                            model_path: document.getElementById('model_path').value,
+                            trust_remote_code: document.getElementById('trust_remote_code').checked,
                             dtype: document.getElementById('dtype').value,
-                            temperature: parseFloat(document.getElementById('temperature').value),
-                            do_sample: document.getElementById('doSample').checked,
-                            top_p: parseFloat(document.getElementById('topP').value),
-                            top_k: parseInt(document.getElementById('topK').value)
+                            local_files_only: document.getElementById('local_files_only').checked,
+                            use_cache: document.getElementById('use_cache').checked,
+                            return_dict_in_generate: document.getElementById('return_dict_in_generate').checked,
+                            output_attentions: document.getElementById('output_attentions').checked,
+                            output_hidden_states: document.getElementById('output_hidden_states').checked,
+                            low_cpu_mem_usage: document.getElementById('low_cpu_mem_usage').checked,
+                            max_new_tokens: parseInt(document.getElementById('max_new_tokens').value) || null,
+                            temperature: parseFloat(document.getElementById('temperature').value) || null,
+                            do_sample: document.getElementById('do_sample').checked,
+                            top_p: parseFloat(document.getElementById('top_p').value) || null,
+                            top_k: parseInt(document.getElementById('top_k').value) || null
                         };
 
                         vscode.postMessage({ 
@@ -248,7 +265,7 @@ class ConfigPanel {
     }
 
     private dispose() {
-        ConfigPanel.currentPanel = undefined;
+        LLMPanel.currentPanel = undefined;
         this._panel = undefined;
 
         while (this._disposables.length) {
@@ -258,4 +275,4 @@ class ConfigPanel {
     }
 }
 
-module.exports = { ConfigPanel }; 
+module.exports = { LLMPanel }; 

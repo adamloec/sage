@@ -39,7 +39,16 @@ class ConnectionPanel {
     private async _initialize() {
         if (!this._panel) return;
 
-        this._updateContent();
+        // Check if backend is installed locally
+        const installer = new BackendInstaller(this._context);
+        const isInstalled = await installer.isInstalled();
+
+        // Get current backend URL and local backend status from settings
+        const config = vscode.workspace.getConfiguration('sage');
+        const currentBackendUrl = config.get('backendUrl') as string || '';
+        const useLocalBackend = config.get('useLocalBackend') as boolean;
+
+        this._updateContent(isInstalled, currentBackendUrl, useLocalBackend);
 
         this._panel.webview.onDidReceiveMessage(
             async (message) => {
@@ -48,27 +57,12 @@ class ConnectionPanel {
                         try {
                             const installer = new BackendInstaller(this._context);
                             await installer.install();
-                            vscode.window.showInformationMessage('Backend installed successfully!');
                             
-                            // Wait a moment for the server to fully start
-                            await new Promise(resolve => setTimeout(resolve, 2000));
-                            
-                            // Check if server is actually running
-                            try {
-                                const response = await axios.get('http://localhost:8000/health');
-                                if (response.status === 200) {
-                                    // Update configuration
-                                    await vscode.workspace.getConfiguration().update(
-                                        'sage.backendUrl', 
-                                        'http://localhost:8000', 
-                                        true
-                                    );
-                                    this._panel?.dispose();
-                                    await vscode.commands.executeCommand('sage.openPanel');
-                                }
-                            } catch (error) {
-                                vscode.window.showErrorMessage('Backend installed but not responding. Please try again.');
-                            }
+                            // Update configurations
+                            await vscode.workspace.getConfiguration().update('sage.backendUrl', 'http://localhost:8000', true);
+                            await vscode.workspace.getConfiguration().update('sage.useLocalBackend', true, true);
+                            this._panel?.dispose();
+                            await vscode.commands.executeCommand('sage.openPanel');
                         } catch (error: any) {
                             vscode.window.showErrorMessage(`Installation failed: ${error.message}`);
                         }
@@ -76,17 +70,14 @@ class ConnectionPanel {
                     case 'connectBackend':
                         const ip = message.ip;
                         try {
-                            // Test connection before saving
-                            const response = await axios.get(`${ip}/health`);
-                            if (response.status === 200) {
-                                // Save the IP to settings
-                                await vscode.workspace.getConfiguration().update('sage.backendUrl', ip, true);
-                                vscode.window.showInformationMessage('Backend connection configured!');
-                                this._panel?.dispose();
-                                await vscode.commands.executeCommand('sage.openPanel');
-                            }
+                            // Save the IP to settings and update local backend status
+                            await vscode.workspace.getConfiguration().update('sage.backendUrl', ip, true);
+                            await vscode.workspace.getConfiguration().update('sage.useLocalBackend', ip === 'http://localhost:8000', true);
+                            vscode.window.showInformationMessage('Backend URL configured!');
+                            this._panel?.dispose();
+                            await vscode.commands.executeCommand('sage.openPanel');
                         } catch (error) {
-                            vscode.window.showErrorMessage('Could not connect to the specified backend. Please check the URL and try again.');
+                            vscode.window.showErrorMessage('Failed to update backend URL configuration.');
                         }
                         break;
                 }
@@ -104,7 +95,7 @@ class ConnectionPanel {
         );
     }
 
-    private _updateContent() {
+    private _updateContent(isInstalled: boolean, currentBackendUrl: string, useLocalBackend: boolean) {
         if (!this._panel) return;
 
         this._panel.webview.html = `<!DOCTYPE html>
@@ -131,26 +122,40 @@ class ConnectionPanel {
         </head>
         <body class="bg-dark-grey text-gray-200 h-screen flex items-center justify-center">
             <div class="max-w-md w-full p-8 bg-light-grey rounded-xl shadow-lg">
-                <h1 class="text-2xl font-bold mb-6 text-center">Connect to Sage Backend</h1>
+                <h1 class="text-2xl font-bold mb-6 text-center">Configure Sage Backend</h1>
                 
                 <div class="space-y-6">
                     <div class="p-4 bg-lighter-grey rounded-lg">
-                        <h2 class="font-semibold mb-2">Install Local Backend</h2>
-                        <p class="text-sm text-gray-400 mb-4">Install and run a local Sage backend on your machine</p>
-                        <button 
-                            onclick="installBackend()"
-                            class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
-                            Install Backend
-                        </button>
+                        <h2 class="font-semibold mb-2">Local Backend</h2>
+                        ${isInstalled ? 
+                            useLocalBackend ? `
+                                <p class="text-sm text-green-500 mb-4">✓ Currently using local backend</p>
+                            ` : `
+                                <p class="text-sm text-green-500 mb-4">✓ Local backend is installed</p>
+                                <button 
+                                    onclick="useLocalBackend()"
+                                    class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors mb-2">
+                                    Use Local Backend
+                                </button>
+                            `
+                        : `
+                            <p class="text-sm text-gray-400 mb-4">Install and run a local Sage backend on your machine</p>
+                            <button 
+                                onclick="installBackend()"
+                                class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                                Install Backend
+                            </button>
+                        `}
                     </div>
 
                     <div class="p-4 bg-lighter-grey rounded-lg">
-                        <h2 class="font-semibold mb-2">Connect to Remote Backend</h2>
+                        <h2 class="font-semibold mb-2">Remote Backend</h2>
                         <p class="text-sm text-gray-400 mb-4">Connect to an existing Sage backend</p>
                         <input 
                             type="text" 
                             id="backendIp"
-                            placeholder="Enter backend IP (e.g., http://localhost:8000)"
+                            value="${useLocalBackend ? '' : currentBackendUrl}"
+                            placeholder="Enter backend URL (e.g., http://localhost:8000)"
                             class="w-full p-2 mb-4 bg-dark-grey border border-border-grey rounded-md focus:outline-none focus:border-blue-500"
                         >
                         <button 
@@ -169,10 +174,13 @@ class ConnectionPanel {
                     vscode.postMessage({ command: 'installBackend' });
                 }
 
+                function useLocalBackend() {
+                    vscode.postMessage({ command: 'connectBackend', ip: 'http://localhost:8000' });
+                }
+
                 function connectBackend() {
                     const ip = document.getElementById('backendIp').value.trim();
                     if (!ip) {
-                        // Show error in UI
                         return;
                     }
                     vscode.postMessage({ command: 'connectBackend', ip });
