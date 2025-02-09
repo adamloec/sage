@@ -48,13 +48,22 @@ class ServerManager {
                 console.log('=== Server startup timed out ===');
                 console.log('Last known process state:', this._process ? 'alive' : 'null');
                 reject(new Error('Server startup timed out'));
-            }, 10000);
+            }, 30000); // Increased timeout to 30 seconds
 
             let errorOutput = '';
+            let startupComplete = false;
 
             this._process.stdout.on('data', (data: Buffer) => {
                 const output = data.toString();
                 console.log('Server stdout:', output);
+                
+                // Check for startup success message
+                if (output.includes('Application startup complete')) {
+                    console.log('=== Server startup complete ===');
+                    clearTimeout(timeout);
+                    startupComplete = true;
+                    resolve();
+                }
             });
 
             this._process.stderr.on('data', (data: any) => {
@@ -63,9 +72,10 @@ class ServerManager {
                 console.log('Server stderr:', error);
                 
                 // Uvicorn logs its startup messages to stderr
-                if (error.includes('Uvicorn running on http://')) {
+                if (error.includes('Application startup complete')) {
                     console.log('=== Server startup complete ===');
                     clearTimeout(timeout);
+                    startupComplete = true;
                     resolve();
                 }
             });
@@ -85,7 +95,10 @@ class ServerManager {
                 console.log('Collected error output:', errorOutput);
                 clearTimeout(timeout);
                 this._process = null;
-                if (code !== 0 && code !== null) {
+                
+                if (!startupComplete) {
+                    reject(new Error(`Server exited during startup with code ${code}. Error: ${errorOutput}`));
+                } else if (code !== 0 && code !== null) {
                     reject(new Error(`Server exited with code ${code}. Error: ${errorOutput}`));
                 }
             });
@@ -123,7 +136,7 @@ class ServerManager {
 
                 process.once('exit', cleanup);
 
-                // If process hasn't exited after 3 seconds, force kill as last resort
+                // Increased timeout from 3 to 5 seconds to allow for cleanup
                 setTimeout(() => {
                     process.removeListener('exit', cleanup);
                     if (process.platform === 'win32') {
@@ -141,7 +154,7 @@ class ServerManager {
                     }
                     console.log('Process kill timed out, forced termination');
                     resolve();
-                }, 3000);
+                }, 5000); // Increased from 3000 to 5000
             });
         } catch (error) {
             console.log('Error during server shutdown:', error);

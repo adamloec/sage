@@ -74,7 +74,30 @@ def run(host, port, reload):
         port=port,
         reload=reload,
         log_level="info",
-        access_log=True
+        access_log=True,
+        log_config={
+            "version": 1,
+            "disable_existing_loggers": False,
+            "formatters": {
+                "default": {
+                    "()": "uvicorn.logging.DefaultFormatter",
+                    "fmt": "%(levelprefix)s %(message)s",
+                    "use_colors": None,
+                }
+            },
+            "handlers": {
+                "default": {
+                    "formatter": "default",
+                    "class": "logging.StreamHandler",
+                    "stream": "ext://sys.stderr",
+                }
+            },
+            "loggers": {
+                "uvicorn": {"handlers": ["default"], "level": "INFO"},
+                "uvicorn.error": {"level": "INFO"},
+                "uvicorn.access": {"handlers": ["default"], "level": "INFO", "propagate": False},
+            },
+        }
     )
     
     server = uvicorn.Server(config)
