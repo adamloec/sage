@@ -105,18 +105,22 @@ class BackendInstaller {
                 progress.report({ message: 'Creating environment...' });
                 await execAsync(`"${pythonCommand}" -m venv "${envPath}"`);
 
-                progress.report({ message: 'Installing backend...' });
+                progress.report({ message: 'Installing PyTorch...' });
                 const pipPath = process.platform === 'win32' ? 
                     path.join(envPath, 'Scripts', 'pip.exe') :
                     path.join(envPath, 'bin', 'pip');
                 
-                // Upgrade pip first
-                await execAsync(`"${pipPath}" install --upgrade pip`);
+                // Install PyTorch first if not on macOS
+                if (process.platform !== 'darwin') {
+                    const cudaVersion = await getCudaVersion();
+                    const torchCommand = cudaVersion
+                        ? `"${pipPath}" install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu${cudaVersion}`
+                        : `"${pipPath}" install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu`;
+                    await execAsync(torchCommand);
+                }
                 
-                // Install wheel and setuptools
-                await execAsync(`"${pipPath}" install wheel setuptools`);
-                
-                // Install the sage package with editable mode and egg name
+                // Then install sage
+                progress.report({ message: 'Installing backend...' });
                 await execAsync(`"${pipPath}" install -e "git+https://github.com/adamloec/sage.git#subdirectory=server&egg=sage" --no-cache-dir`);
                 
                 // Verify the installation
@@ -154,6 +158,19 @@ class BackendInstaller {
         } catch (error) {
             return false;
         }
+    }
+}
+
+async function getCudaVersion(): Promise<string | null> {
+    try {
+        const { stdout } = await execAsync('nvcc --version');
+        const match = stdout.match(/release (\d+\.\d+)/);
+        if (match) {
+            return match[1].replace('.', '');  // e.g., '11.8' -> '118'
+        }
+        return null;
+    } catch {
+        return null;
     }
 }
 
