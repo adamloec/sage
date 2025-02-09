@@ -77,9 +77,11 @@ export function getSettingsModalScripts(): string {
 
     async function loadConfigurations() {
         try {
+            // Get current model
             const currentModelResponse = await fetch('http://localhost:8000/api/llm');
             const currentModel = await currentModelResponse.json();
             
+            // Get all saved configs
             const configsResponse = await fetch('http://localhost:8000/api/llm/configs');
             const configs = await configsResponse.json();
             currentConfigs = configs;
@@ -127,11 +129,53 @@ export function getSettingsModalScripts(): string {
         }).join('');
     }
 
+    // Handle model selection change
+    document.getElementById('currentModel').addEventListener('change', async (e) => {
+        const configId = e.target.value;
+        const config = currentConfigs.find(c => c.id === parseInt(configId));
+        if (config) {
+            try {
+                const response = await fetch('http://localhost:8000/api/llm', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(config)
+                });
+
+                if (response.ok) {
+                    vscode.postMessage({ 
+                        command: 'updateModelStatus',
+                        modelName: config.model_name 
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to update current model:', error);
+            }
+        }
+    });
+
     async function deleteConfig(configId) {
         try {
             await fetch(\`http://localhost:8000/api/llm/configs/\${configId}\`, {
                 method: 'DELETE'
             });
+            
+            // Check if this was the current model
+            const currentModelResponse = await fetch('http://localhost:8000/api/llm');
+            const currentModel = await currentModelResponse.json();
+            
+            if (currentModel && currentModel.id === configId) {
+                // Remove the current model
+                await fetch('http://localhost:8000/api/llm', {
+                    method: 'DELETE'
+                });
+                vscode.postMessage({ 
+                    command: 'updateModelStatus',
+                    modelName: null 
+                });
+            }
+            
             loadConfigurations();
         } catch (error) {
             console.error('Failed to delete configuration:', error);
@@ -141,28 +185,6 @@ export function getSettingsModalScripts(): string {
     function addNewConfig() {
         document.getElementById('newConfigModal').classList.remove('hidden');
     }
-
-    document.getElementById('currentModel').addEventListener('change', async (e) => {
-        const configId = e.target.value;
-        const config = currentConfigs.find(c => c.id === parseInt(configId));
-        if (config) {
-            try {
-                await fetch('http://localhost:8000/api/llm', {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(config)
-                });
-                vscode.postMessage({ 
-                    command: 'updateModelStatus',
-                    modelName: config.model_name 
-                });
-            } catch (error) {
-                console.error('Failed to update current model:', error);
-            }
-        }
-    });
 
     document.getElementById('settingsModal').addEventListener('click', (e) => {
         if (e.target.id === 'settingsModal') {

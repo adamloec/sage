@@ -153,7 +153,7 @@ export function getLLMConfigModalScripts(): string {
         const modelName = document.getElementById('newModelName').value.trim();
         const modelPath = document.getElementById('newModelPath').value.trim();
 
-        if (!modelName) {
+        if (!modelName || !modelPath) {
             // TODO: Show error message
             return;
         }
@@ -161,7 +161,7 @@ export function getLLMConfigModalScripts(): string {
         try {
             const config = {
                 model_name: modelName,
-                model_path: modelPath || null,
+                model_path: modelPath,
                 trust_remote_code: document.getElementById('trustRemoteCode').checked,
                 dtype: document.getElementById('dtype').value,
                 local_files_only: document.getElementById('localFilesOnly').checked,
@@ -177,6 +177,7 @@ export function getLLMConfigModalScripts(): string {
                 top_k: document.getElementById('topK').value || null
             };
 
+            // Save the config
             const response = await fetch('http://localhost:8000/api/llm/configs', {
                 method: 'POST',
                 headers: {
@@ -186,6 +187,22 @@ export function getLLMConfigModalScripts(): string {
             });
 
             if (response.ok) {
+                const savedConfig = await response.json();
+                
+                // Set as current model
+                await fetch('http://localhost:8000/api/llm', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(savedConfig)
+                });
+
+                vscode.postMessage({ 
+                    command: 'updateModelStatus',
+                    modelName: savedConfig.model_name 
+                });
+
                 closeNewConfig();
                 loadConfigurations();
             }

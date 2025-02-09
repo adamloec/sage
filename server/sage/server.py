@@ -24,8 +24,8 @@ async def lifespan(app: FastAPI):
     yield
     
     # Cleanup on shutdown
-    app.state.llm_manager.remove_llm()
-    app.state.chat_session_manager.clear_sessions()
+    await app.state.llm_manager.remove_llm()
+    await app.state.chat_session_manager.clear_sessions()
 
 app = FastAPI(lifespan=lifespan)
 
