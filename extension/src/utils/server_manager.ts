@@ -119,12 +119,23 @@ class ServerManager {
         try {
             // First try graceful shutdown via API endpoint
             try {
-                await axios.post('http://localhost:' + this._port + '/api/shutdown');
+                await axios.post('http://localhost:' + this._port + '/api/shutdown', {
+                    timeout: 5000 // Add timeout to prevent hanging
+                });
                 console.log('Graceful shutdown initiated');
             } catch (error) {
                 console.log('Graceful shutdown failed, falling back to process termination');
-                // Send SIGTERM signal
-                process.kill('SIGTERM');
+                if (process.platform === 'win32') {
+                    // On Windows, terminate the entire process tree
+                    try {
+                        await execAsync(`taskkill /F /T /PID ${process.pid}`);
+                    } catch (error) {
+                        console.log('Initial taskkill failed:', error);
+                    }
+                } else {
+                    // On Unix systems, send SIGTERM first
+                    process.kill('SIGTERM');
+                }
             }
 
             // Wait for process to exit
@@ -136,26 +147,49 @@ class ServerManager {
 
                 process.once('exit', cleanup);
 
-                // Increased timeout from 3 to 5 seconds to allow for cleanup
-                setTimeout(() => {
+                // Force kill after timeout
+                setTimeout(async () => {
                     process.removeListener('exit', cleanup);
+                    console.log('Process kill timed out, forcing termination');
+                    
                     if (process.platform === 'win32') {
                         try {
-                            execAsync(`taskkill /F /T /PID ${process.pid}`);
+                            // Force kill any remaining processes
+                            await execAsync(`taskkill /F /T /PID ${process.pid}`);
+                            // Additional cleanup for Windows to handle lingering connections
+                            await execAsync(`netstat -ano | findstr :${this._port} | findstr LISTENING`).then(
+                                async ({stdout}: {stdout: string}) => {
+                                    if (stdout.trim()) {
+                                        const pid = stdout.trim().split(/\s+/).pop();
+                                        if (pid) {
+                                            await execAsync(`taskkill /F /PID ${pid}`);
+                                        }
+                                    }
+                                }
+                            ).catch(() => {
+                                // Ignore errors if no process is found
+                            });
                         } catch (error) {
                             console.log('Force kill failed:', error);
                         }
                     } else {
                         try {
                             process.kill('SIGKILL');
+                            // Additional cleanup for Unix systems
+                            await execAsync(`lsof -ti:${this._port} | xargs kill -9`).catch(() => {
+                                // Ignore errors if no process is found
+                            });
                         } catch (error) {
                             console.log('Force kill failed:', error);
                         }
                     }
-                    console.log('Process kill timed out, forced termination');
                     resolve();
-                }, 5000); // Increased from 3000 to 5000
+                }, 5000);
             });
+
+            // Additional wait to allow OS to clean up sockets
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
         } catch (error) {
             console.log('Error during server shutdown:', error);
         }

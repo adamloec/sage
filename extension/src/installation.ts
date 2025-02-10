@@ -164,6 +164,21 @@ class BackendInstaller {
             return false;
         }
     }
+
+    async cleanup() {
+        try {
+            const envPath = path.join(this.context.globalStorageUri.fsPath, this.ENV_NAME);
+            if (fs.existsSync(envPath)) {
+                await fs.promises.rm(envPath, { recursive: true, force: true });
+                console.log('Cleaned up Sage environment successfully');
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('Failed to cleanup Sage environment:', error);
+            return false;
+        }
+    }
 }
 
 async function getCudaVersion(): Promise<string | null> {
@@ -179,4 +194,10 @@ async function getCudaVersion(): Promise<string | null> {
     }
 }
 
-module.exports = { BackendInstaller };
+module.exports = { 
+    BackendInstaller,
+    deactivate: async (context: vscode.ExtensionContext) => {
+        const installer = new BackendInstaller(context);
+        await installer.cleanup();
+    }
+};

@@ -3,7 +3,7 @@ const { ServerManager } = require('../utils/server_manager');
 const axios = require('axios');
 const { MessageManager } = require('../utils/message_manager');
 import { getSettingsModalHtml, getSettingsModalScripts } from './settings_modal';
-
+const { BackendInstaller } = require('../installation');
 export class SagePanel {
     private _context: vscode.ExtensionContext;
     private _panel: vscode.WebviewPanel | undefined;
@@ -22,14 +22,19 @@ export class SagePanel {
     }
 
     static async createOrShow(context: vscode.ExtensionContext) {
-        const { BackendInstaller } = require('../installation');
-        const installer = new BackendInstaller(context);
-        const isInstalled = await installer.isInstalled();
+        // First check configuration to determine mode
+        const config = vscode.workspace.getConfiguration('sage');
+        const isStandalone = config.get('standalone') as boolean;
 
-        // If backend is not installed, show connection panel
-        if (!isInstalled) {
-            vscode.commands.executeCommand('sage.openConnectionPanel');
-            return;
+        if (isStandalone) {
+            // Only check local installation if in standalone mode
+            const installer = new BackendInstaller(context);
+            const isInstalled = await installer.isInstalled();
+
+            if (!isInstalled) {
+                vscode.commands.executeCommand('sage.openConnectionPanel');
+                return;
+            }
         }
 
         const column = vscode.window.activeTextEditor
@@ -84,24 +89,32 @@ export class SagePanel {
         }
 
         this._isInitializing = true;
-        this._updateContent('Starting server...', false);
-        
+        const config = vscode.workspace.getConfiguration('sage');
+        const isStandalone = config.get('standalone') as boolean;
+
         try {
-            await this._serverManager.startServer();
-            
-            // Check if panel was disposed during initialization
-            if (!this._panel) {
-                console.log('Panel was disposed during initialization, cleaning up...');
-                await this._serverManager.stopServer();
-                this._isInitializing = false;
-                return;
+            if (isStandalone) {
+                // Only start server in standalone mode
+                this._updateContent('Starting server...', false);
+                await this._serverManager.startServer();
+                
+                // Check if panel was disposed during initialization
+                if (!this._panel) {
+                    console.log('Panel was disposed during initialization, cleaning up...');
+                    await this._serverManager.stopServer();
+                    this._isInitializing = false;
+                    return;
+                }
+
+                this._updateContent('Server running', true);
+                MessageManager.showInfo('Sage server started successfully');
+            } else {
+                this._updateContent('Connected to remote server', true);
             }
 
-            this._updateContent('Server running', true);
-            MessageManager.showInfo('Sage server started successfully');
             this._panel.webview.postMessage({ 
                 command: 'showStatus', 
-                message: 'Server started successfully' 
+                message: isStandalone ? 'Server started successfully' : 'Connected to remote server'
             });
 
             // Add message handler for button clicks and status checks
@@ -192,12 +205,16 @@ export class SagePanel {
             );
         } catch (error: any) {
             console.error('Initialization error:', error);
-            // Always attempt to stop the server on error
-            await this._serverManager.stopServer();
+            if (isStandalone) {
+                // Only attempt to stop server on error if in standalone mode
+                await this._serverManager.stopServer();
+            }
             
             if (this._panel) {
-                const errorMessage = `Failed to start server: ${error.message}`;
-                this._updateContent('Server stopped', false);
+                const errorMessage = isStandalone 
+                    ? `Failed to start server: ${error.message}`
+                    : `Failed to connect: ${error.message}`;
+                this._updateContent(isStandalone ? 'Server stopped' : 'Connection failed', false);
                 MessageManager.showError(errorMessage);
                 this._panel.webview.postMessage({ 
                     command: 'showError', 
@@ -430,11 +447,16 @@ export class SagePanel {
             return;
         }
 
+        const config = vscode.workspace.getConfiguration('sage');
+        const isStandalone = config.get('standalone') as boolean;
+
         try {
-            // Stop server first
-            await this._serverManager.stopServer();
+            // Only stop server if in standalone mode
+            if (isStandalone) {
+                await this._serverManager.stopServer();
+            }
         } catch (error) {
-            console.error('Error stopping server during disposal:', error);
+            console.error('Error during disposal:', error);
         }
 
         // Clean up panel resources

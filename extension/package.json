@@ -54,6 +54,11 @@
           "type": "boolean",
           "default": false,
           "description": "Whether to run Sage in standalone mode with a local backend"
+        },
+        "sage.isConfigured": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the user has configured their backend preferences"
         }
       }
     },

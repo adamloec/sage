@@ -18,10 +18,6 @@ export function getSettingsModalHtml(): string {
                         <span class="text-green-500">●</span>
                         <span>Local Server (Port 8000)</span>
                     </div>
-                    <button onclick="openConfigFile()" 
-                        class="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-sm text-white rounded-lg transition-colors">
-                        Config
-                    </button>
                 </div>
 
                 <!-- LLM Configuration Section -->
@@ -193,6 +189,5 @@ export function getSettingsModalScripts(): string {
     });
 
     ${getLLMConfigModalScripts()}
-
-    // ... rest of existing settings scripts ...`;
+    `;
 } 

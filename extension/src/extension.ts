@@ -4,7 +4,30 @@ const { BackendInstaller } = require('./installation');
 const { SagePanel } = require('./panel/panel');
 const { ConnectionPanel } = require('./panel/connection_panel');
 
-async function checkBackendConnection(backendUrl: string = 'http://localhost:8000'): Promise<boolean> {
+// Configuration type for better type safety
+interface SageConfig {
+    backendUrl: string;
+    standalone: boolean;
+    isConfigured: boolean; // New setting to track if user has made initial choice
+}
+
+async function getConfiguration(): Promise<SageConfig> {
+    const config = vscode.workspace.getConfiguration('sage');
+    return {
+        backendUrl: config.get('backendUrl') as string,
+        standalone: config.get('standalone') as boolean,
+        isConfigured: config.get('isConfigured') as boolean
+    };
+}
+
+async function updateConfiguration(updates: Partial<SageConfig>): Promise<void> {
+    const config = vscode.workspace.getConfiguration('sage');
+    for (const [key, value] of Object.entries(updates)) {
+        await config.update(`sage.${key}`, value, true);
+    }
+}
+
+async function checkBackendConnection(backendUrl: string): Promise<boolean> {
     try {
         const response = await axios.get(`${backendUrl}/health`);
         return response.status === 200;
@@ -13,84 +36,91 @@ async function checkBackendConnection(backendUrl: string = 'http://localhost:800
     }
 }
 
-async function isBackendInstalled(context: vscode.ExtensionContext): Promise<boolean> {
-    const installer = new BackendInstaller(context);
-    return installer.isInstalled();
-}
-
 function registerCommands(context: vscode.ExtensionContext) {
-    // Install backend command
-    const installCommand = vscode.commands.registerCommand('sage.installBackend', async () => {
-        console.log('Install command triggered');
-        const installer = new BackendInstaller(context);
-        await installer.install();
-    });
-
-    // Open panel command
+    // Open panel command - now always checks configuration first
     const openPanelCommand = vscode.commands.registerCommand('sage.openPanel', async () => {
-        const config = vscode.workspace.getConfiguration('sage');
-        const backendUrl = config.get('backendUrl') as string;
-        const standalone = config.get('standalone') as boolean;
+        const config = await getConfiguration();
         
-        if (standalone) {
-            // For standalone mode, check if backend is installed
-            const installed = await isBackendInstalled(context);
-            if (installed) {
-                SagePanel.createOrShow(context);
-                return;
-            }
-        } else if (backendUrl && backendUrl !== 'http://localhost:8000') {
-            // For remote backends, check if they're actually running
-            const isConnected = await checkBackendConnection(backendUrl);
-            if (isConnected) {
-                SagePanel.createOrShow(context);
-                return;
-            }
+        // If not configured, show connection panel first
+        if (!config.isConfigured) {
+            await vscode.commands.executeCommand('sage.openConnectionPanel');
+            return;
         }
 
-        // If we get here, either the backend isn't installed or the remote connection failed
-        ConnectionPanel.createOrShow(context);
+        // Verify connection based on mode
+        let canConnect = false;
+        if (config.standalone) {
+            const installer = new BackendInstaller(context);
+            canConnect = await installer.isInstalled();
+        } else {
+            canConnect = await checkBackendConnection(config.backendUrl);
+        }
+
+        if (canConnect) {
+            SagePanel.createOrShow(context);
+        } else {
+            vscode.window.showErrorMessage(
+                'Cannot connect to backend. Please check your connection settings.',
+                'Configure Backend'
+            ).then(selection => {
+                if (selection === 'Configure Backend') {
+                    vscode.commands.executeCommand('sage.openConnectionPanel');
+                }
+            });
+        }
     });
 
     // Open connection panel command
-    const openConnectionPanelCommand = vscode.commands.registerCommand('sage.openConnectionPanel', () => {
-        ConnectionPanel.createOrShow(context);
-    });
-
-    // Add all commands to subscriptions
-    context.subscriptions.push(
-        installCommand,
-        openPanelCommand,
-        openConnectionPanelCommand
+    const openConnectionPanelCommand = vscode.commands.registerCommand(
+        'sage.openConnectionPanel', 
+        () => ConnectionPanel.createOrShow(context)
     );
+
+    context.subscriptions.push(openPanelCommand, openConnectionPanelCommand);
 }
 
 async function activate(context: vscode.ExtensionContext) {
     console.log('Sage extension activating...');
-
-    // Register all commands
+    
+    // Register commands
     registerCommands(context);
 
-    // Check if backend is installed and prompt if not
-    console.log('Running installation check...');
-    const installer = new BackendInstaller(context);
-
-    console.log('Showing installation prompt...');
-    const result = await vscode.window.showInformationMessage(
-        'Would you like to install the Sage backend?',
-        'Yes', 'No', 'Later'
-    );
+    // Check if configuration exists
+    const config = await getConfiguration();
     
-    console.log('User response:', result);
-    if (result === 'Yes') {
-        await installer.install();
+    // Check for existing backend installation
+    const installer = new BackendInstaller(context);
+    const isBackendInstalled = await installer.isInstalled();
+    
+    if (isBackendInstalled) {
+        const choice = await vscode.window.showInformationMessage(
+            'An existing Sage backend installation was detected. Would you like to remove it?',
+            'Yes, remove it', 
+            'No, keep it'
+        );
+        
+        if (choice === 'Yes, remove it') {
+            await installer.cleanup();
+            vscode.window.showInformationMessage('Existing backend installation removed.');
+        } else if (choice === 'No, keep it') {
+            // Set standalone mode since there's an existing installation
+            await updateConfiguration({
+                standalone: true,
+                isConfigured: true
+            });
+            return;
+        }
     }
 
-    console.log('Sage extension activation complete');
+    if (!config.isConfigured) {
+        // Show connection panel on first activation
+        vscode.commands.executeCommand('sage.openConnectionPanel');
+    }
 }
 
-function deactivate() {
-    console.log('Sage extension deactivated');
+export function deactivate(context: vscode.ExtensionContext) {
+    const { deactivate } = require('./installation');
+    return deactivate(context);
 }
 
 module.exports = {

@@ -1,7 +1,7 @@
 export function getLLMConfigModalHtml(): string {
     return `
     <div id="newConfigModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-light-grey rounded-xl p-6 w-[90%] max-w-md shadow-2xl">
+        <div class="bg-light-grey rounded-xl p-6 w-[90%] max-w-3xl shadow-2xl">
             <div class="flex justify-between items-center mb-6">
                 <h2 class="text-xl font-semibold">Add New Model</h2>
                 <button onclick="closeNewConfig()" class="text-gray-400 hover:text-white">
@@ -9,27 +9,29 @@ export function getLLMConfigModalHtml(): string {
                 </button>
             </div>
             
-            <div class="space-y-4 max-h-[70vh] overflow-y-auto">
+            <div class="space-y-4">
                 <!-- Required Fields -->
-                <div>
-                    <label class="block text-sm mb-2">Model Name*</label>
-                    <input type="text" id="newModelName" 
-                        class="w-full p-2 bg-darker-grey border border-border-grey rounded-md focus:outline-none focus:border-blue-500"
-                        placeholder="e.g., Mistral 7B">
-                </div>
-                
-                <div>
-                    <label class="block text-sm mb-2">Model Path</label>
-                    <input type="text" id="newModelPath" 
-                        class="w-full p-2 bg-darker-grey border border-border-grey rounded-md focus:outline-none focus:border-blue-500"
-                        placeholder="Path to model file">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm mb-2">Model Name*</label>
+                        <input type="text" id="newModelName" 
+                            class="w-full p-2 bg-darker-grey border border-border-grey rounded-md focus:outline-none focus:border-blue-500 text-white"
+                            placeholder="e.g., Mistral 7B">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm mb-2">Model Path</label>
+                        <input type="text" id="newModelPath" 
+                            class="w-full p-2 bg-darker-grey border border-border-grey rounded-md focus:outline-none focus:border-blue-500 text-white"
+                            placeholder="Path to model file">
+                    </div>
                 </div>
 
                 <!-- Core Model Parameters -->
                 <div class="pt-4 border-t border-border-grey">
                     <h3 class="text-sm font-medium mb-4">Core Model Parameters</h3>
                     
-                    <div class="space-y-3">
+                    <div class="grid grid-cols-2 gap-4">
                         <div class="flex items-center justify-between">
                             <label class="text-sm">Trust Remote Code</label>
                             <input type="checkbox" id="trustRemoteCode" class="form-checkbox">
@@ -37,7 +39,7 @@ export function getLLMConfigModalHtml(): string {
                         
                         <div>
                             <label class="block text-sm mb-1">Data Type</label>
-                            <select id="dtype" class="w-full p-2 bg-darker-grey border border-border-grey rounded-md">
+                            <select id="dtype" class="w-full p-2 bg-darker-grey border border-border-grey rounded-md text-white">
                                 <option value="float16">float16</option>
                                 <option value="float32">float32</option>
                                 <option value="bfloat16">bfloat16</option>
@@ -80,34 +82,34 @@ export function getLLMConfigModalHtml(): string {
                 <div class="pt-4 border-t border-border-grey">
                     <h3 class="text-sm font-medium mb-4">Generation Parameters</h3>
                     
-                    <div class="space-y-3">
+                    <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm mb-1">Max New Tokens</label>
                             <input type="number" id="maxNewTokens" 
-                                class="w-full p-2 bg-darker-grey border border-border-grey rounded-md">
+                                class="w-full p-2 bg-darker-grey border border-border-grey rounded-md text-white">
                         </div>
 
                         <div>
                             <label class="block text-sm mb-1">Temperature</label>
                             <input type="number" id="temperature" step="0.1" min="0" max="2"
-                                class="w-full p-2 bg-darker-grey border border-border-grey rounded-md">
-                        </div>
-
-                        <div class="flex items-center justify-between">
-                            <label class="text-sm">Do Sample</label>
-                            <input type="checkbox" id="doSample" class="form-checkbox">
+                                class="w-full p-2 bg-darker-grey border border-border-grey rounded-md text-white">
                         </div>
 
                         <div>
                             <label class="block text-sm mb-1">Top P</label>
                             <input type="number" id="topP" step="0.1" min="0" max="1"
-                                class="w-full p-2 bg-darker-grey border border-border-grey rounded-md">
+                                class="w-full p-2 bg-darker-grey border border-border-grey rounded-md text-white">
                         </div>
 
                         <div>
                             <label class="block text-sm mb-1">Top K</label>
                             <input type="number" id="topK" min="0"
-                                class="w-full p-2 bg-darker-grey border border-border-grey rounded-md">
+                                class="w-full p-2 bg-darker-grey border border-border-grey rounded-md text-white">
+                        </div>
+
+                        <div class="flex items-center justify-between">
+                            <label class="text-sm">Do Sample</label>
+                            <input type="checkbox" id="doSample" class="form-checkbox">
                         </div>
                     </div>
                 </div>
