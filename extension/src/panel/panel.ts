@@ -124,20 +124,29 @@ export class SagePanel {
 
                         case 'sendMessage':
                             try {
-                                const modelResponse = await axios.get('http://localhost:8000/api/llm');
-                                if (!modelResponse.data?.model_name) {
-                                    MessageManager.showError('Load a model before attempting to use the chat.');
-                                    this._panel?.webview.postMessage({ 
-                                        command: 'clearPendingMessage' 
-                                    });
-                                    return;
+                                const config = vscode.workspace.getConfiguration('sage');
+                                const isStandalone = config.get('standalone') as boolean;
+                                const backendUrl = isStandalone 
+                                    ? 'http://localhost:8000'  // Local backend in standalone mode
+                                    : config.get('remoteBackendUrl') as string;  // Remote server URL
+
+                                if (isStandalone) {
+                                    // In standalone mode, check if model is loaded first
+                                    const modelResponse = await axios.get(`${backendUrl}/api/llm`);
+                                    if (!modelResponse.data?.model_name) {
+                                        MessageManager.showError('Load a model before attempting to use the chat.');
+                                        this._panel?.webview.postMessage({ 
+                                            command: 'clearPendingMessage' 
+                                        });
+                                        return;
+                                    }
                                 }
 
-                                // If we have a model and message text, proceed with chat
+                                // If we have a message text, proceed with chat
                                 if (message.text) {
                                     // Create session if this is the first message
                                     if (!this._currentSessionId) {
-                                        const sessionResponse = await axios.post('http://localhost:8000/api/chat/sessions');
+                                        const sessionResponse = await axios.post(`${backendUrl}/api/chat/sessions`);
                                         this._currentSessionId = sessionResponse.data.session_id;
                                         // Load initial chat history
                                         this._panel?.webview.postMessage({
@@ -147,9 +156,10 @@ export class SagePanel {
                                     }
 
                                     // Send the message
-                                    const response = await axios.post(`http://localhost:8000/api/chat/sessions/${this._currentSessionId}/messages`, {
-                                        content: message.text
-                                    });
+                                    const response = await axios.post(
+                                        `${backendUrl}/api/chat/sessions/${this._currentSessionId}/messages`,
+                                        { content: message.text }
+                                    );
 
                                     // Update UI with the new message
                                     if (response.data.message) {

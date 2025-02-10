@@ -42,22 +42,23 @@ class ConnectionPanel {
 
         // Get current configuration
         const config = vscode.workspace.getConfiguration('sage');
-        const currentBackendUrl = config.get('backendUrl') as string;
+        const currentRemoteBackendUrl = config.get('remoteBackendUrl') as string;
         const isStandalone = config.get('standalone') as boolean;
         const isConfigured = config.get('isConfigured') as boolean;
+
 
         // Check if backend is installed locally
         const installer = new BackendInstaller(this._context);
         const isInstalled = await installer.isInstalled();
 
-        this._updateContent(isInstalled, currentBackendUrl, isStandalone, isConfigured);
+        this._updateContent(isInstalled, currentRemoteBackendUrl, isStandalone, isConfigured);
 
         this._panel.webview.onDidReceiveMessage(
             async (message) => {
                 switch (message.command) {
                     case 'saveConfiguration':
                         try {
-                            const { mode, backendUrl } = message;
+                            const { mode, remoteBackendUrl } = message;
                             const isStandalone = mode === 'standalone';
 
                             // Validate configuration
@@ -65,13 +66,13 @@ class ConnectionPanel {
                                 throw new Error('Local backend not installed');
                             }
 
-                            if (!isStandalone && !backendUrl) {
+                            if (!isStandalone && !remoteBackendUrl) {
                                 throw new Error('Backend URL required for remote connection');
-                            }
+                            }   
 
                             // Test connection
                             if (!isStandalone) {
-                                const response = await axios.get(`${backendUrl}/health`);
+                                const response = await axios.get(`${remoteBackendUrl}/health`);
                                 if (response.status !== 200) {
                                     throw new Error('Could not connect to backend');
                                 }
@@ -79,10 +80,11 @@ class ConnectionPanel {
 
                             // Update configuration
                             await vscode.workspace.getConfiguration().update('sage.standalone', isStandalone, true);
-                            await vscode.workspace.getConfiguration().update('sage.backendUrl', 
-                                isStandalone ? 'http://localhost:8000' : backendUrl, 
+                            await vscode.workspace.getConfiguration().update('sage.remoteBackendUrl', 
+                                isStandalone ? 'http://localhost:8000' : remoteBackendUrl, 
                                 true
                             );
+
                             await vscode.workspace.getConfiguration().update('sage.isConfigured', true, true);
 
                             // Show success and open main panel
@@ -122,7 +124,7 @@ class ConnectionPanel {
 
     private _updateContent(
         isInstalled: boolean, 
-        currentBackendUrl: string, 
+        currentRemoteBackendUrl: string, 
         isStandalone: boolean,
         isConfigured: boolean
     ) {
@@ -133,7 +135,7 @@ class ConnectionPanel {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Sage Backend Configuration</title>
+            <title>Select Sage Backend</title>
             <script src="https://cdn.tailwindcss.com"></script>
             <script>
                 tailwind.config = {
@@ -152,7 +154,7 @@ class ConnectionPanel {
         </head>
         <body class="bg-dark-grey text-gray-200 h-screen flex items-center justify-center">
             <div class="max-w-md w-full p-8 bg-light-grey rounded-xl shadow-lg">
-                <h1 class="text-2xl font-bold mb-6 text-center">Configure Sage Backend</h1>
+                <h1 class="text-2xl font-bold mb-6 text-center">Select Sage Backend</h1>
                 
                 <div class="space-y-6">
                     <!-- Mode Selection -->
@@ -193,10 +195,11 @@ class ConnectionPanel {
                     <div id="remoteSection" class="p-4 bg-lighter-grey rounded-lg ${isStandalone ? 'hidden' : ''}">
                         <input 
                             type="text" 
-                            id="backendUrl"
-                            value="${!isStandalone ? currentBackendUrl : ''}"
+                            id="remoteBackendUrl"
+                            value="${!isStandalone ? currentRemoteBackendUrl : ''}"
                             placeholder="Enter backend URL (e.g., http://localhost:8000)"
                             class="w-full p-2 mb-4 bg-dark-grey border border-border-grey rounded-md focus:outline-none focus:border-blue-500"
+
                         >
                     </div>
 
@@ -204,7 +207,7 @@ class ConnectionPanel {
                     <button 
                         onclick="saveConfiguration()"
                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
-                        Save Configuration
+                        Connect to Sage
                     </button>
                 </div>
             </div>
@@ -224,11 +227,13 @@ class ConnectionPanel {
                 }
 
                 function saveConfiguration() {
-                    const backendUrl = document.getElementById('backendUrl').value.trim();
+                    const remoteBackendUrl = document.getElementById('remoteBackendUrl').value.trim();
                     vscode.postMessage({ 
                         command: 'saveConfiguration',
+
                         mode: currentMode,
-                        backendUrl: currentMode === 'standalone' ? null : backendUrl
+                        remoteBackendUrl: currentMode === 'standalone' ? null : remoteBackendUrl
+
                     });
                 }
             </script>

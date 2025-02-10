@@ -48,7 +48,7 @@ class ServerManager {
                 console.log('=== Server startup timed out ===');
                 console.log('Last known process state:', this._process ? 'alive' : 'null');
                 reject(new Error('Server startup timed out'));
-            }, 30000); // Increased timeout to 30 seconds
+            }, 30000);
 
             let errorOutput = '';
             let startupComplete = false;

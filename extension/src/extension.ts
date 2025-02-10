@@ -6,31 +6,34 @@ const { ConnectionPanel } = require('./panel/connection_panel');
 
 // Configuration type for better type safety
 interface SageConfig {
-    backendUrl: string;
+    remoteBackendUrl: string;
     standalone: boolean;
     isConfigured: boolean; // New setting to track if user has made initial choice
 }
 
+
 async function getConfiguration(): Promise<SageConfig> {
     const config = vscode.workspace.getConfiguration('sage');
     return {
-        backendUrl: config.get('backendUrl') as string,
+        remoteBackendUrl: config.get('remoteBackendUrl') as string,
         standalone: config.get('standalone') as boolean,
         isConfigured: config.get('isConfigured') as boolean
     };
+
 }
 
 async function updateConfiguration(updates: Partial<SageConfig>): Promise<void> {
     const config = vscode.workspace.getConfiguration('sage');
     for (const [key, value] of Object.entries(updates)) {
-        await config.update(`sage.${key}`, value, true);
+        await config.update(key, value, true);
     }
 }
 
-async function checkBackendConnection(backendUrl: string): Promise<boolean> {
+async function checkRemoteBackendConnection(remoteBackendUrl: string): Promise<boolean> {
     try {
-        const response = await axios.get(`${backendUrl}/health`);
+        const response = await axios.get(`${remoteBackendUrl}/health`);
         return response.status === 200;
+
     } catch (error) {
         return false;
     }
@@ -53,7 +56,7 @@ function registerCommands(context: vscode.ExtensionContext) {
             const installer = new BackendInstaller(context);
             canConnect = await installer.isInstalled();
         } else {
-            canConnect = await checkBackendConnection(config.backendUrl);
+            canConnect = await checkRemoteBackendConnection(config.remoteBackendUrl);
         }
 
         if (canConnect) {
@@ -82,12 +85,9 @@ function registerCommands(context: vscode.ExtensionContext) {
 async function activate(context: vscode.ExtensionContext) {
     console.log('Sage extension activating...');
     
-    // Register commands
+    // Register commands first
     registerCommands(context);
 
-    // Check if configuration exists
-    const config = await getConfiguration();
-    
     // Check for existing backend installation
     const installer = new BackendInstaller(context);
     const isBackendInstalled = await installer.isInstalled();
@@ -102,23 +102,44 @@ async function activate(context: vscode.ExtensionContext) {
         if (choice === 'Yes, remove it') {
             await installer.cleanup();
             vscode.window.showInformationMessage('Existing backend installation removed.');
-        } else if (choice === 'No, keep it') {
-            // Set standalone mode since there's an existing installation
-            await updateConfiguration({
-                standalone: true,
-                isConfigured: true
-            });
-            return;
         }
     }
 
-    if (!config.isConfigured) {
-        // Show connection panel on first activation
-        vscode.commands.executeCommand('sage.openConnectionPanel');
+    // Always reset configuration on activation
+    await updateConfiguration({
+        remoteBackendUrl: 'http://localhost:8000',
+        standalone: false,
+        isConfigured: false
+    });
+
+    // Prompt for backend installation if not installed
+    if (!isBackendInstalled) {
+        const installChoice = await vscode.window.showInformationMessage(
+            'Would you like to install the Sage backend?',
+            'Install Backend',
+            'Skip'
+        );
+        
+        if (installChoice === 'Install Backend') {
+            const success = await installer.install();
+            if (success) {
+                await updateConfiguration({
+                    standalone: true,
+                    isConfigured: true
+                });
+            }
+        }
     }
 }
 
 export function deactivate(context: vscode.ExtensionContext) {
+    // Clear all configuration settings when the extension is deactivated
+    updateConfiguration({
+        remoteBackendUrl: 'http://localhost:8000',
+        standalone: false,
+        isConfigured: false
+    });
+    
     const { deactivate } = require('./installation');
     return deactivate(context);
 }
