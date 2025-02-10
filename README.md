@@ -1,7 +1,14 @@
 # Sage
-Feature rich  VS code extension for interacting with and configuring local, open source large language models.
+Feature rich backend server for interacting with and configuring local, open source large language models.
+
+Supports two different modes, meant to be used with the Sage VS Code extension:
+
+- Standalone mode: The backend is hosted locally and the LLM configurations are created and stored on the local machine.
+- Remote mode: The backend is hosted remotely, and setup with a queue service to handle requests from different VS code clients
+
 
 ## Goal
+
 
 The goal of this project is to develop a VS code extension that brings local LLM capabilities directly into the editor. This has probably been done before, but what seperates Sage from other extensions is just about everything in Sage is customizable by the user: Models, configurations, embeddings, etc. I enjoy having the power to configure everything I can about the software I use, especially with LLMs, and my goal is to provide that environment to developers in an AI coding assistant.
 
