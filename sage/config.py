@@ -24,7 +24,7 @@ MODE = os.getenv("SAGE_MODE", "production")
 # Create the production LLM configuration as an instance of LLMConfig
 PRODUCTION_LLM_CONFIG = LLMConfig(
     model_name="prod_model",
-    model_path="C:/Users/Adam/dev/projects/sage/sage/llm/hf/generation/Qwen2.5-Coder-1.5B-Instruct",
+    model_path="C:/Users/Adam/dev/projects/sage/sage/llm/hf/generation/Qwen2.5-Coder-1.5B",
     trust_remote_code=False,
     dtype="float16",
     local_files_only=True,
