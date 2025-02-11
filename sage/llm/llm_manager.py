@@ -2,7 +2,6 @@ from typing import Optional
 
 from sage.api.dto import LLMConfig
 from sage.llm.llm import SageLLM
-from sage.llm.embeddings import SageEmbeddings
 
 class LLMManager:
     def __init__(self):

@@ -6,27 +6,42 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 class Base(DeclarativeBase):
     pass
 
+class UserDB(Base):
+    __tablename__ = "users"
+    
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    
+    # Relationship to chat sessions
+    sessions: Mapped[List["ChatSessionDB"]] = relationship(
+        "ChatSessionDB", back_populates="user", cascade="all, delete-orphan"
+    )
+
 class ChatSessionDB(Base):
     __tablename__ = "chat_sessions"
     
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    # Now, use a foreign key to reference the user which owns this session
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     last_message_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     messages: Mapped[List["ChatMessageDB"]] = relationship(
-        back_populates="session",
-        cascade="all, delete-orphan"
+        "ChatMessageDB", back_populates="session", cascade="all, delete-orphan"
     )
+    
+    # Relationship to the user record
+    user: Mapped["UserDB"] = relationship("UserDB", back_populates="sessions")
 
 class ChatMessageDB(Base):
     __tablename__ = "chat_messages"
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    session_id: Mapped[str] = mapped_column(ForeignKey("chat_sessions.id"))
+    session_id: Mapped[str] = mapped_column(String, ForeignKey("chat_sessions.id"))
     role: Mapped[str] = mapped_column(String)
     content: Mapped[str] = mapped_column(String)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     
-    session: Mapped[ChatSessionDB] = relationship(back_populates="messages")
+    session: Mapped[ChatSessionDB] = relationship("ChatSessionDB", back_populates="messages")
 
 class LLMConfigDB(Base):
     __tablename__ = "llm_configs"

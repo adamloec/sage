@@ -1,9 +1,9 @@
-from contextlib import asynccontextmanager
-import os
 from pathlib import Path
+import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from .db_models import Base
+from contextlib import asynccontextmanager
 
 # Get database path from environment or use default
 package_dir = Path(__file__).parent
@@ -30,11 +30,33 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-@asynccontextmanager
 async def get_db():
-    """Provide a transactional scope around a series of operations."""
+    """Dependency for FastAPI (async generator)."""
     session = AsyncSessionLocal()
     try:
         yield session
     finally:
         await session.close()
+
+# -------------------------
+# NEW: DBContextManager wrapper
+# -------------------------
+
+class DBContextManager:
+    def __init__(self, async_gen):
+        self.async_gen = async_gen
+        self._session = None
+
+    async def __aenter__(self):
+        # Get the next item from the async generator
+        self._session = await self.async_gen.__anext__()
+        return self._session
+
+    async def __aexit__(self, exc_type, exc_val, tb):
+        await self.async_gen.aclose()
+
+def get_db_cm():
+    """Return an async context manager for the DB session.
+       Use this when you want to employ the "async with" syntax.
+    """
+    return DBContextManager(get_db())

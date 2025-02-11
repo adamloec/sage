@@ -6,11 +6,10 @@ import asyncio
 import signal
 import sys
 
-from sage.llm.llm_manager import LLMManager
 from sage.chat.chat_session_manager import ChatSessionManager
-from sage.chat.db.database import init_db, get_db
+from sage.chat.db.database import init_db, get_db_cm
 from sage.api.chat_router import router as chat_router
-from sage.api.llm_router import router as llm_router
+from sage.api.user_router import router as user_router
 
 import sage.config as config
 
@@ -23,14 +22,39 @@ async def lifespan(app: FastAPI):
     # Initialize database
     await init_db()
     
-    app.state.llm_manager = LLMManager()
-    app.state.chat_session_manager = ChatSessionManager(get_db)
+    if config.MODE == "production":
+        # In production mode: load a single LLM (with static config) and a global inference lock
+        from sage.llm.llm import SageLLM  # Use the same SageLLM class
+        app.state.llm = SageLLM(llm_config=config.PRODUCTION_LLM_CONFIG)
+        app.state.llm.load_llm()  # Permanently load the model
+        
+        # Store production llm config if you want to expose it in chat responses
+        app.state.production_llm_config = config.PRODUCTION_LLM_CONFIG
+        
+        # Create a lock to ensure only one inference runs at a time
+        app.state.inference_lock = asyncio.Lock()
+        
+        # Use the context-manager based DB helper:
+        app.state.chat_session_manager = ChatSessionManager(get_db_cm)
+    else:
+        # Standalone mode: full feature set including LLM management
+        from sage.llm.llm_manager import LLMManager
+        app.state.llm_manager = LLMManager()
+        app.state.chat_session_manager = ChatSessionManager(get_db_cm)
 
     yield
     
     # Cleanup on shutdown
-    await app.state.llm_manager.remove_llm()
-    await app.state.chat_session_manager.clear_sessions()
+    if config.MODE == "production":
+        try:
+            app.state.llm.deload_llm()
+        except Exception as e:
+            print(f"Error cleaning up production LLM: {e}")
+        await app.state.chat_session_manager.clear_sessions()
+    else:
+        from sage.llm.llm_manager import LLMManager
+        await app.state.llm_manager.remove_llm()
+        await app.state.chat_session_manager.clear_sessions()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -42,7 +66,6 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
-
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
@@ -53,35 +76,40 @@ async def shutdown():
     print("Shutdown requested - initiating graceful shutdown")
     
     try:
-        # Safely cleanup resources only if they exist and are initialized
+        # Clean up resources if they exist
         if hasattr(app.state, 'llm_manager') and app.state.llm_manager is not None:
             try:
                 await app.state.llm_manager.remove_llm()
             except Exception as e:
                 print(f"Error cleaning up LLM manager: {e}")
-        
+                
         if hasattr(app.state, 'chat_session_manager') and app.state.chat_session_manager is not None:
             try:
                 await app.state.chat_session_manager.clear_sessions()
             except Exception as e:
                 print(f"Error cleaning up chat sessions: {e}")
-        
-        # Signal the shutdown event
+                
         shutdown_event.set()
-        
         return {"message": "Server shutdown initiated"}
     except Exception as e:
         print(f"Error during shutdown: {e}")
         return {"message": f"Shutdown initiated with errors: {str(e)}"}
 
-# Include routers
-app.include_router(chat_router, prefix="/api")
-app.include_router(llm_router, prefix="/api")
+# Include the chat router always
+app.include_router(chat_router, prefix="/api/chat")
+
+# In standalone mode, include the LLM management router.
+if config.MODE != "production":
+    from sage.api.llm_router import router as llm_router
+    app.include_router(llm_router, prefix="/api")
+
+# Include the user router
+app.include_router(user_router, prefix="/api/user")
 
 def run(host, port, reload):
     print(f"Starting Sage server on {host}:{port}")
     
-    config = uvicorn.Config(
+    uvicorn_config = uvicorn.Config(
         "sage.server:app",
         host=host,
         port=port,
@@ -113,9 +141,8 @@ def run(host, port, reload):
         }
     )
     
-    server = uvicorn.Server(config)
+    server = uvicorn.Server(uvicorn_config)
     
-    # Handle shutdown signal
     async def watch_shutdown():
         await shutdown_event.wait()
         print("Shutdown event received, stopping server...")
@@ -125,10 +152,8 @@ def run(host, port, reload):
         except Exception as e:
             print(f"Error during server shutdown: {e}")
     
-    # Setup signal handlers for SIGTERM and SIGINT
     def signal_handler(signum, frame):
         print(f"Received signal {signum}")
-        # Use create_task to avoid blocking in signal handler
         loop = asyncio.get_event_loop()
         loop.create_task(shutdown())
     
@@ -136,7 +161,6 @@ def run(host, port, reload):
     signal.signal(signal.SIGINT, signal_handler)
     
     try:
-        # Run the server with shutdown watcher
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.run_until_complete(

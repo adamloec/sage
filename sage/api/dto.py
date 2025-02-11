@@ -22,7 +22,7 @@ class LLMConfig(BaseModel):
     temperature: Optional[float] = None
     do_sample: Optional[bool] = None
     top_p: Optional[float] = None
-    top_k: Optional[float] = None
+    top_k: Optional[int] = None
 
 class ChatMessage(BaseModel):
     """Single message in a chat"""
@@ -55,3 +55,10 @@ class ChatMessageResponse(ApiResponse):
     """Response model for chat messages"""
     message: ChatMessage
     session_id: str
+
+class ChatSessionSummary(BaseModel):
+    session_id: str = Field(..., description="The ID of the chat session")
+    created_at: datetime = Field(..., description="When the session was created")
+    last_message_at: Optional[datetime] = Field(
+        None, description="Timestamp of the last message in the session"
+    )
