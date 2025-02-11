@@ -123,12 +123,16 @@ async def list_chat_sessions(
     request: Request,
     x_user_id: Optional[str] = Header(None)
 ):
-    """List all chat sessions for the specified user."""
+    """List all chat sessions for the specified user in descending order by last_message_at."""
     if not x_user_id:
         raise HTTPException(status_code=400, detail="User ID is required")
     
     async with request.app.state.chat_session_manager.get_db() as db:
-        query = select(ChatSessionDB).where(ChatSessionDB.user_id == x_user_id)
+        query = (
+            select(ChatSessionDB)
+            .where(ChatSessionDB.user_id == x_user_id)
+            .order_by(ChatSessionDB.last_message_at.desc())
+        )
         result = await db.execute(query)
         sessions = result.scalars().all()
     
