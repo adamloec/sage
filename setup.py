@@ -25,6 +25,7 @@ setup(
         "uvicorn",
         "sqlalchemy",
         "transformers",
+        "accelerate",
         "pydantic",
         "aiosqlite",
         "python-dotenv",

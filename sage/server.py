@@ -4,10 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import asyncio
 import signal
-import sys
 
 from sage.chat.chat_session_manager import ChatSessionManager
-from sage.chat.db.database import init_db, get_db_cm
+from sage.db.database import init_db, get_db_cm
 from sage.api.chat_router import router as chat_router
 from sage.api.user_router import router as user_router
 
@@ -28,7 +27,6 @@ async def lifespan(app: FastAPI):
         app.state.llm = SageLLM(llm_config=config.PRODUCTION_LLM_CONFIG)
         app.state.llm.load_llm()  # Permanently load the model
         
-        # Store production llm config if you want to expose it in chat responses
         app.state.production_llm_config = config.PRODUCTION_LLM_CONFIG
         
         # Create a lock to ensure only one inference runs at a time
@@ -50,11 +48,9 @@ async def lifespan(app: FastAPI):
             app.state.llm.deload_llm()
         except Exception as e:
             print(f"Error cleaning up production LLM: {e}")
-        await app.state.chat_session_manager.clear_sessions()
     else:
         from sage.llm.llm_manager import LLMManager
         await app.state.llm_manager.remove_llm()
-        await app.state.chat_session_manager.clear_sessions()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -83,12 +79,6 @@ async def shutdown():
             except Exception as e:
                 print(f"Error cleaning up LLM manager: {e}")
                 
-        if hasattr(app.state, 'chat_session_manager') and app.state.chat_session_manager is not None:
-            try:
-                await app.state.chat_session_manager.clear_sessions()
-            except Exception as e:
-                print(f"Error cleaning up chat sessions: {e}")
-                
         shutdown_event.set()
         return {"message": "Server shutdown initiated"}
     except Exception as e:
@@ -98,13 +88,13 @@ async def shutdown():
 # Include the chat router always
 app.include_router(chat_router, prefix="/api/chat")
 
+# Include the user router
+app.include_router(user_router, prefix="/api/user")
+
 # In standalone mode, include the LLM management router.
 if config.MODE != "production":
     from sage.api.llm_router import router as llm_router
     app.include_router(llm_router, prefix="/api")
-
-# Include the user router
-app.include_router(user_router, prefix="/api/user")
 
 def run(host, port, reload):
     print(f"Starting Sage server on {host}:{port}")

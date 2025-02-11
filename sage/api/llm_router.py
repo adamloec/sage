@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Request
 from sage.api.dto import LLMConfig
 from typing import Dict, Optional
-from sage.chat.db.db_models import LLMConfigDB
-from sage.chat.db.database import get_db
+
+from sage.db.db_models import LLMConfigDB
+from sage.db.database import get_db
 from sqlalchemy import select
 
 router = APIRouter()

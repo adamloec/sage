@@ -2,9 +2,10 @@ from datetime import datetime
 from typing import List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from sage.api.dto import ChatMessage, LLMConfig
 from sage.llm.llm import SageLLM
-from sage.chat.db.db_models import ChatSessionDB, ChatMessageDB
+from sage.db.db_models import ChatSessionDB, ChatMessageDB
 
 class ChatSession:
     def __init__(self, db_session: ChatSessionDB):

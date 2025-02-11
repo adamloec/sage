@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from sage.chat.db.database import get_db
+from sage.db.database import get_db
 from sage.api.dto import BaseModel, Field
 
 class UserResponse(BaseModel):
@@ -25,7 +25,7 @@ async def create_or_get_user(
     If a user ID is provided in the x-user-id header and the user exists, return it.
     Otherwise, create a new user record (using the provided ID or generating a new one).
     """
-    from sage.chat.db.db_models import UserDB  # Import here to avoid circular dependencies if needed
+    from sage.db.db_models import UserDB
 
     if x_user_id:
         # Try to retrieve an existing user with the provided ID

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request, Header
 from typing import List, Optional
 from sqlalchemy.future import select
+
 from sage.api.dto import (
     ChatSessionResponse,
     ChatMessageRequest,
@@ -8,8 +9,7 @@ from sage.api.dto import (
     ChatSessionSummary,
 )
 from fastapi.responses import StreamingResponse
-import asyncio
-from sage.chat.db.db_models import ChatSessionDB
+from sage.db.db_models import ChatSessionDB
 
 router = APIRouter()
 
@@ -39,7 +39,7 @@ async def create_chat_session(
 @router.get("/sessions/{session_id}", response_model=ChatSessionResponse)
 async def get_chat_session(request: Request, session_id: str):
     """Get an existing chat session"""
-    session = request.app.state.chat_session_manager.get_session(session_id)
+    session = await request.app.state.chat_session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
@@ -63,7 +63,7 @@ async def send_message(
     stream: bool = False
 ):
     """Send a message in a chat session"""
-    session = request.app.state.chat_session_manager.get_session(session_id)
+    session = await request.app.state.chat_session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
@@ -142,12 +142,12 @@ async def list_chat_sessions(
     ]
     return summaries
 
-# @router.delete("/sessions/{session_id}")
-# async def delete_chat_session(request: Request, session_id: str):
-#     """Delete a chat session"""
-#     session = request.app.state.session_manager.get_session(session_id)
-#     if not session:
-#         raise HTTPException(status_code=404, detail="Session not found")
+@router.delete("/sessions/{session_id}")
+async def delete_chat_session(request: Request, session_id: str):
+    """Delete a chat session"""
+    session = await request.app.state.chat_session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
     
-#     request.app.state.session_manager.delete_session(session_id)
-#     return {"status": "success", "message": "Chat session deleted"}
+    await request.app.state.chat_session_manager.delete_session(session_id)
+    return {"status": "success", "message": "Chat session deleted"}

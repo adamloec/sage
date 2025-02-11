@@ -1,4 +1,4 @@
-from typing import Optional, List, Any, Dict, Callable, Iterator
+from typing import Optional, List
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer
 import gc
@@ -73,8 +73,18 @@ class SageLLM:
 
         try:
             # Inference
+            messages = [
+                {"role": "system", "content": "You are Sage, a helpful coding assistant."},
+                {"role": "user", "content": prompt}
+            ]
+            text = self._tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True
+            )
+
             encoded_input = self._tokenizer(
-                prompt,
+                text,
                 return_tensors="pt",
             ).to(self._device)
             

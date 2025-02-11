@@ -2,8 +2,8 @@ from pathlib import Path
 import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from .db_models import Base
-from contextlib import asynccontextmanager
+
+from sage.db.db_models import Base
 
 # Get database path from environment or use default
 package_dir = Path(__file__).parent
@@ -38,10 +38,6 @@ async def get_db():
     finally:
         await session.close()
 
-# -------------------------
-# NEW: DBContextManager wrapper
-# -------------------------
-
 class DBContextManager:
     def __init__(self, async_gen):
         self.async_gen = async_gen
@@ -56,7 +52,4 @@ class DBContextManager:
         await self.async_gen.aclose()
 
 def get_db_cm():
-    """Return an async context manager for the DB session.
-       Use this when you want to employ the "async with" syntax.
-    """
     return DBContextManager(get_db())
