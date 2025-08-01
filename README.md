@@ -1,2 +1,1 @@
-# sage
-sage
+Ghostty permissoins stuff in Settings/Privacy (Screen capture / take control of screen, accessibility)

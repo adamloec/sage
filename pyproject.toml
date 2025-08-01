@@ -1,0 +1,13 @@
+[project]
+name = "sage"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "beautifulsoup4>=4.13.4",
+    "pydantic>=2.11.7",
+    "pyobjc-core>=11.1",
+    "pyobjc-framework-applicationservices>=11.1",
+    "pyobjc-framework-cocoa>=11.1",
+]
